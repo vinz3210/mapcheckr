@@ -14,13 +14,61 @@
 
         <div class="wrapper__inner">
             <div v-if="error" class="container center danger">{{ error }}</div>
-
+            <div v-if="!state.started" class="container">
+            <h2>Settings</h2>
+            <div class="content">
+                <div class="form__row">
+                    <label for="query">Query</label>
+                </div>
+                <div class="form__row">
+                    <input type="text" id="query" class="full" v-model="query" />
+                </div>
+                <div class="form__row">
+                    <label for="isos">ISO country codes, comma separated</label>
+                </div>
+                <div class="form__row">
+                    <input type="text" id="isos" v-model="iso" />
+                </div>
+                <div class="form__row">
+                    <label for="tags">Tags, comma separated</label>
+                </div>
+                <div class="form__row">
+                    <input type="text" id="tags" v-model="tags" />
+                </div>
+                <div v-if="state.osmQueryRunning" class="container center">
+                    <p><Badge :text=" state.osmDataGotCounter + '/' + allSmallBoxesCounter" /></p>
+                </div>
+                <div class="flex-center wrap space-between p-05">
+                    <div class="flex-center wrap gap-02">
+                        <CopyToClipboard :data="resolvedLocs" />
+                        <Button @click="getOsmQueryLocs" text="GetLocs" />
+                    </div>
+                    <div class="flex-center wrap gap-02">
+                        <Button @click="downloadGeoJsonFile" text="DownloadGeoJson" />
+                    </div>
+                    <div class="flex-center wrap gap-02">
+                        <Button @click="downloadUnpannedUncheckedJsonFile" text="DownloadUnpannedUncheckedJson" />
+                    </div>
+                </div>
+            </div>
+            </div>
             <div v-if="state.loaded" class="container center">
                 <h4>{{ customMap.nbLocs }} imported {{ pluralize("location", customMap.nbLocs) }}</h4>
                 <Button v-if="!state.started" @click="handleClickStart" class="mt-02" text="Start checking" />
             </div>
 
             <div v-if="!state.started" class="container">
+                
+                <div class="flex-center wrap space-between p-05">
+                    <div v-if="!state.started" class="flex-center wrap gap-05">
+                        Paste or
+                        <input @change="loadFromJSON" type="file" id="file" class="input-file" accept="application/json" />
+                        <label for="file" class="btn">Import JSON</label>
+                    </div>
+                    <div v-if="state.finished" class="flex-center wrap gap-02">
+                        <Button @click="resetState" text="Reset" />
+                    </div>
+                </div>
                 <h2>General settings</h2>
                 <div class="content">
                     <div class="flex">
@@ -367,6 +415,8 @@
 </template>
 
 <script setup>
+var global = global || window;
+
 import { reactive, ref, computed } from "vue";
 import { useStorage } from "@vueuse/core";
 import SVreq from "@/utils/SVreq";
@@ -380,6 +430,192 @@ import CopyToClipboard from "@/components/CopyToClipboard.vue";
 import ExportToJSON from "@/components/ExportToJSON.vue";
 import ExportToCSV from "./components/ExportToCSV.vue";
 import Distribution from "@/components/CountryDistribution.vue";
+//import { haversineDistance } from "@/utils/haversineDistance";
+import countryBoundingBoxes from './assets/countryBoundingBoxes.json'
+import { overpass } from "overpass-ts";
+
+
+
+var outputGeoJsonFeatures = [];
+var finishedGettingOSMData = false;
+var allSmallBoxesCounter = 0;
+
+
+
+
+const isoToBoundingBox = (iso) => {
+    console.log(iso)
+    const bbox = countryBoundingBoxes[iso].boundingBox;
+    console.log(bbox);
+    return bbox;
+};
+const isoToCountryName = (iso) => {
+    console.log(iso);
+    console.log(countryBoundingBoxes);
+    console.log(countryBoundingBoxes[iso]);
+    return countryBoundingBoxes[iso]["name"];
+};
+
+const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
+    const minlat = boundingbox["minLat"];
+    const minlon = boundingbox["minLng"];
+    const maxlat = boundingbox["maxLat"];
+    const maxlon = boundingbox["maxLng"];
+    const boxes = [];
+    let lat = minlat;
+    let lon = minlon;
+    while (lat < maxlat) {
+        while (lon < maxlon) {
+            boxes.push([lat, lon, lat + 0.5, lon + 0.5]);
+            lon += 0.5;
+        }
+        lon = minlon;
+        lat += 0.5;
+    }
+    return boxes;
+};
+
+const getOsmQueryLocs = () => {
+    outputGeoJsonFeatures = [];
+    state.osmQueryRunning = true;
+    state.osmDataGotCounter = 0;
+    allSmallBoxesCounter = 0;
+    const query = document.getElementById("query").value;
+    const isos = document.getElementById("isos").value;
+    const isosArr = isos.split(",").map(x=>x.trim().toUpperCase());
+    var smallerCountryBoundingBoxes = {}
+    isosArr.forEach((iso) => {
+        smallerCountryBoundingBoxes[iso] = convertBoundingBoxToSmallerBoxes(isoToBoundingBox(iso.trim()));
+        allSmallBoxesCounter += smallerCountryBoundingBoxes[iso].length;
+    });
+    getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
+    
+};
+
+async function getOsmQueryLocsByISO (query, smallerCountryBoundingBoxes){
+    Object.keys(smallerCountryBoundingBoxes).forEach((iso)=>{
+        getOsmQueryLocsForBboxes(query, smallerCountryBoundingBoxes[iso], iso);
+    });
+}
+
+async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
+    if (bboxes.length == 0){
+        
+        console.log(outputGeoJsonFeatures)
+        return;
+    }
+    const osmQuery = `[out:json];
+    area["ISO3166-1"="${iso}"]->.searchArea;
+    ${query}(${bboxes[0].join(",")})(area.searchArea); out geom;`;
+    console.log(osmQuery);
+    await overpass(osmQuery).then((response) => {
+        response.json().then(data =>{
+            console.log(data)
+            data.elements.forEach((element) => {
+
+                outputGeoJsonFeatures.push(element)
+            })
+            console.log(outputGeoJsonFeatures.length);
+            state.osmDataGotCounter++;
+            getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
+        }
+        );
+    });
+};
+
+function getCenterOfWay(way){
+    let lat = 0;
+    let lon = 0;
+    way.geometry.forEach((node)=>{
+        lat += node.lat;
+        lon += node.lon;
+    });
+    return [lat/way.geometry.length, lon/way.geometry.length];
+}
+
+function convertElementToCustomCoordinate(element){
+    let type = element.type;
+    let lat = 0;
+    let lng = 0;
+    if (type == "node"){
+        lat = element.lat;
+        lng = element.lon;
+    }
+    else if (type == "way"){
+        if(state.wayPicking == "random"){
+            let randomIndex = Math.floor(Math.random() * element.geometry.length);
+            lat = element.geometry[randomIndex].lat;
+            lng = element.geometry[randomIndex].lon;
+        } else if (state.wayPicking == "center"){
+            [lat, lng] = getCenterOfWay(element);
+        }
+    }
+    else if(type == "relation"){
+        lat = element.bounds.minlat + (element.bounds.maxlat - element.bounds.minlat)/2;
+        lng = element.bounds.minlon + (element.bounds.maxlon - element.bounds.minlon)/2;
+    }
+    else{
+        console.log("Unknown type: " + type);
+    }
+    let tags_to_include = document.getElementById("tags").value.split(",").map(x=>x.trim());
+    return {lat: lat, lng: lng, extra:{
+        tags: tags_to_include.map((tag)=>{return element.tags[tag]==undefined?"":tag+" - "+element.tags[tag]}).filter((tag)=>{return tag != ""}),
+    }};
+}
+
+function downloadUnpannedUncheckedJsonFile(){
+    const jsonFile = {
+        "name": "out",
+        customCoordinates: outputGeoJsonFeatures.map((element, i) => {
+            let returnObject =  convertElementToCustomCoordinate(element);
+            returnObject.extra.index = i;
+            return returnObject;
+        }),
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonFile));
+    const downloadAnchorNode = document.createElement("a");
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "unpannedUnchecked.json");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+/*
+const getOsmQueryLocsForBbox = (query, bbox) => {
+    console.log(bbox);
+    const osmQuery = `[out:json]; ${query}(${bbox.join(",")}); out geom;`;
+    overpass(osmQuery).then((response) => {
+        response.json().then(data =>{
+            data.elements.forEach((element) => {
+                outputGeoJsonFeatures.push(element)
+            })
+            console.log(outputGeoJsonFeatures.length);
+
+        }
+        );
+    });
+};
+*/
+
+const downloadGeoJsonFile = ()=>{
+    const geoJson = {
+        type: "FeatureCollection",
+        features: outputGeoJsonFeatures
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geoJson));
+    const downloadAnchorNode = document.createElement("a");
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "data.geojson");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+
+
+
+
 
 const dateToday = new Date().getFullYear() + "-" + ("0" + (new Date().getMonth() + 1)).slice(-2);
 
@@ -449,6 +685,10 @@ const initialState = {
     outOfDateRange: 0,
     isolated: 0,
     tooClose: 0,
+    osmQueryStarted: 0,
+    osmDataGotCounter: 0,
+    wayPicking: "random",
+
 };
 
 const state = reactive({ ...initialState });

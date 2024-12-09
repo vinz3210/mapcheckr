@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css?family=Quicksand:400,700");
+@import url("https://fonts.googleapis.com/css?family=Jost");
 
 :root {
     --success: #5ee6b2;
@@ -15,10 +15,10 @@ body {
     margin: 0;
     line-height: 1;
     background-color: #242424;
-    font-family: "Quicksand", serif;
+    font-family: "Jost", serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 14px;
+    font-size: 18px;
     color: #fff;
 }
 
@@ -38,13 +38,12 @@ small {
 
 input, select {
     margin: 0;
-    font-size: 13px;
+    font-size: 16px;
     font-family: inherit;
     background: #292929;
     border-radius: 5px;
     cursor: pointer;
     outline: 0;
-    text-align: center;
     border: 1px solid var(--success);
     border: 1px solid #757575;
 }
@@ -64,6 +63,14 @@ input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     -moz-appearance:textfield;
+}
+
+
+input[type="text"]{
+    min-width: 400px;
+}
+input[type="text"].full{
+    width: 100%;
 }
 
 hr {
