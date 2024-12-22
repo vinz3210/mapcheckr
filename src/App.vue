@@ -2,13 +2,9 @@
     <div class="wrapper">
         <div class="flex-center wrap space-between p-05">
             <h1>MapCheckr</h1>
-            <div v-if="!state.started" class="flex-center wrap gap-05">
-                Paste or
-                <input @change="loadFromJSON" type="file" id="file" class="input-file" accept="application/json" />
-                <label for="file" class="btn">Import JSON</label>
-            </div>
             <div v-if="state.finished" class="flex-center wrap gap-02">
                 <Button @click="resetState" text="Reset" />
+                <Button @click="debug" text="debug" />
             </div>
         </div>
 
@@ -35,20 +31,34 @@
                 <div class="form__row">
                     <input type="text" id="tags" v-model="tags" />
                 </div>
+
+                <div class="form__row">
+                    <label for="degrees">BoxMaxDegrees</label>
+                </div>
+                <div class="form__row">
+                    <input type="number" id="degrees" v-model="degrees" />
+                </div>
+                
+                <div class="form__row">
+                    <label for="updatePanningCheckbox">Pan to POI</label>
+                </div>
+                <div class="form__row">
+                    <Checkbox id = "updatePanningCheckbox" v-model:checked="settings.updatePanning" label="update panning" />
+                </div>
                 <div v-if="state.osmQueryRunning" class="container center">
                     <p><Badge :text=" state.osmDataGotCounter + '/' + allSmallBoxesCounter" /></p>
                 </div>
                 <div class="flex-center wrap space-between p-05">
                     <div class="flex-center wrap gap-02">
-                        <CopyToClipboard :data="resolvedLocs" />
+                        <!--CopyToClipboard :data="resolvedLocs" /-->
                         <Button @click="getOsmQueryLocs" text="GetLocs" />
                     </div>
-                    <div class="flex-center wrap gap-02">
+                    <!--div class="flex-center wrap gap-02">
                         <Button @click="downloadGeoJsonFile" text="DownloadGeoJson" />
                     </div>
                     <div class="flex-center wrap gap-02">
                         <Button @click="downloadUnpannedUncheckedJsonFile" text="DownloadUnpannedUncheckedJson" />
-                    </div>
+                    </div-->
                 </div>
             </div>
             </div>
@@ -60,11 +70,6 @@
             <div v-if="!state.started" class="container">
                 
                 <div class="flex-center wrap space-between p-05">
-                    <div v-if="!state.started" class="flex-center wrap gap-05">
-                        Paste or
-                        <input @change="loadFromJSON" type="file" id="file" class="input-file" accept="application/json" />
-                        <label for="file" class="btn">Import JSON</label>
-                    </div>
                     <div v-if="state.finished" class="flex-center wrap gap-02">
                         <Button @click="resetState" text="Reset" />
                     </div>
@@ -122,37 +127,6 @@
                         <hr />
                     </div>
 
-                    <Checkbox
-                        @change="settings.rejectNoLinks ? (settings.rejectNoLinksIfNoHeading = true) : true"
-                        v-model:checked="settings.rejectNoLinks"
-                        label="Reject all isolated locations"
-                        optText="Uncheck for photospheres map. This is for locations with no arrows to move to a nearby location, which may include regular but broken coverage."
-                    />
-                    <hr />
-
-                    <div v-if="!settings.rejectNoLinks">
-                        <Checkbox
-                            @change="settings.rejectNoLinksIfNoHeading ? true : (settings.rejectNoLinks = false)"
-                            v-model:checked="settings.rejectNoLinksIfNoHeading"
-                            label="Reject unpanned isolated locations"
-                        />
-                        <hr />
-                    </div>
-
-                    <Checkbox
-                        v-model:checked="settings.updatePanoIDs"
-                        label="Update panoIDs"
-                        optText="Update your locations to the most recent coverage. Also useful to automatically panoID your map."
-                    />
-                    <hr />
-
-                    <Checkbox
-                        v-model:checked="settings.updateCoordinates"
-                        label="Update coordinates"
-                        optText="non-panoID locations might slightly change"
-                    />
-                    <hr />
-
                     Radius<input type="number" v-model.number="settings.radius" @change="handleRadiusInput" />m<br />
                     <small>Radius in which to search for a non-panoID'ed panorama.</small>
                     <hr />
@@ -162,125 +136,6 @@
                         <input type="number" v-model.number="settings.nearbyRadius" @change="handleNearbyRadiusInput" />m radius
                     </div>
                     <hr />
-                </div>
-
-                <h2>Headings</h2>
-                <div class="content">
-                    <div class="mb-1">
-                        <h4>Update heading for :</h4>
-                        <div class="indent">
-                            <Checkbox v-model:checked="settings.heading.filterBy.panoID" label="panoID" />
-                            <Checkbox v-model:checked="settings.heading.filterBy.nonPanoID" label="non-panoID" />
-                            <Checkbox v-model:checked="settings.heading.filterBy.panned" label="panned" />
-                            <Checkbox v-model:checked="settings.heading.filterBy.unpanned" label="unpanned" />
-                            <small
-                                v-if="Object.values(settings.heading.filterBy).some((val) => val) && !areHeadingSettingsGood"
-                                class="danger"
-                                >Incorrect heading settings</small
-                            >
-                        </div>
-                    </div>
-
-                    <div v-if="areHeadingSettingsGood">
-                        <div class="mb-1">
-                            <h4>Direction :</h4>
-                            <div class="indent">
-                                <div class="form__row space-between" v-if="settings.filterByGen[1]">
-                                    Gen 1 :
-                                    <select v-model="settings.heading.directionBy[1]">
-                                        <option value="link">Along road</option>
-                                        <option value="forward">To front of car</option>
-                                        <option value="backward">To back of car</option>
-                                        <option value="any">Any</option>
-                                    </select>
-                                </div>
-                                <div class="form__row space-between" v-if="settings.filterByGen[23]">
-                                    Gen 2 & 3 :
-                                    <select v-model="settings.heading.directionBy[23]">
-                                        <option value="link">Along road</option>
-                                        <option value="forward">To front of car</option>
-                                        <option value="backward">To back of car</option>
-                                        <option value="any">Any</option>
-                                    </select>
-                                </div>
-                                <div class="form__row space-between" v-if="settings.filterByGen[4]">
-                                    Gen 4 :
-                                    <select v-model="settings.heading.directionBy[4]">
-                                        <option value="link">Along road</option>
-                                        <option value="forward">To front of car</option>
-                                        <option value="backward">To back of car</option>
-                                        <option value="any">Any</option>
-                                    </select>
-                                </div>
-                                <div
-                                    class="form__row space-between"
-                                    v-if="Object.values(settings.filterByGen).some((val) => val === true)"
-                                >
-                                    Dead ends :
-                                    <select v-model="settings.heading.directionBy['DEAD_END']">
-                                        <option value="link">Along road</option>
-                                        <option value="forward">To front of car</option>
-                                        <option value="backward">To back of car</option>
-                                        <option value="any">Any</option>
-                                    </select>
-                                </div>
-
-                                <label class="form__row space-between">
-                                    Heading deviation :
-                                    <Slider
-                                        v-model="settings.heading.range"
-                                        :min="-180"
-                                        :max="180"
-                                        :lazy="false"
-                                        tooltipPosition="bottom"
-                                        style="width: 140px"
-                                    />
-                                </label>
-                                <Checkbox
-                                    v-model:checked="settings.heading.randomInRange"
-                                    label="Random in range"
-                                    class="indent"
-                                />
-                            </div>
-                        </div>
-
-                        <div class="mb-1">
-                            <Checkbox v-model:checked="settings.pitch.updatePitch" label="Pitch :" class="strong" />
-                            <div v-if="settings.pitch.updatePitch" class="indent">
-                                <label class="form__row space-between">
-                                    Pitch deviation :
-                                    <Slider
-                                        v-model="settings.pitch.range"
-                                        :min="-90"
-                                        :max="90"
-                                        :lazy="false"
-                                        tooltipPosition="bottom"
-                                        style="width: 140px"
-                                    />
-                                </label>
-                                <Checkbox v-model:checked="settings.pitch.randomInRange" label="Random in range" class="indent" />
-                            </div>
-                        </div>
-
-                        <div class="mb-1">
-                            <Checkbox v-model:checked="settings.zoom.updateZoom" label="Zoom :" class="strong" />
-                            <div v-if="settings.zoom.updateZoom" class="indent">
-                                <label class="form__row space-between">
-                                    Zoom deviation :
-                                    <Slider
-                                        v-model="settings.zoom.range"
-                                        :min="0"
-                                        :max="4"
-                                        :step="0.5"
-                                        :lazy="false"
-                                        tooltipPosition="bottom"
-                                        style="width: 140px"
-                                    />
-                                </label>
-                                <Checkbox v-model:checked="settings.zoom.randomInRange" label="Random in range" class="indent" />
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -457,6 +312,7 @@ const isoToCountryName = (iso) => {
 };
 
 const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
+    const degreestoadd = parseFloat(document.getElementById("degrees").value);
     const minlat = boundingbox["minLat"];
     const minlon = boundingbox["minLng"];
     const maxlat = boundingbox["maxLat"];
@@ -466,11 +322,11 @@ const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
     let lon = minlon;
     while (lat < maxlat) {
         while (lon < maxlon) {
-            boxes.push([lat, lon, lat + 0.5, lon + 0.5]);
-            lon += 0.5;
+            boxes.push([lat, lon, lat + degreestoadd, lon + degreestoadd]);
+            lon += degreestoadd;
         }
         lon = minlon;
-        lat += 0.5;
+        lat += degreestoadd;
     }
     return boxes;
 };
@@ -502,11 +358,21 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
     if (bboxes.length == 0){
         
         console.log(outputGeoJsonFeatures)
+
+
+        console.log("finished 1")
+        state.osmQueryRunning = false;
+        const jsonFile = getUnpannedUncheckedJson();
+        console.log("unpannedUnchecked.json", jsonFile);
+        checkJSON(jsonFile);
+        handleClickStart()
+
         return;
     }
+    let outputForm = state.wayPicking == "center"? "center":"geom";
     const osmQuery = `[out:json];
     area["ISO3166-1"="${iso}"]->.searchArea;
-    ${query}(${bboxes[0].join(",")})(area.searchArea); out geom;`;
+    ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
     console.log(osmQuery);
     await overpass(osmQuery).then((response) => {
         response.json().then(data =>{
@@ -546,13 +412,12 @@ function convertElementToCustomCoordinate(element){
             let randomIndex = Math.floor(Math.random() * element.geometry.length);
             lat = element.geometry[randomIndex].lat;
             lng = element.geometry[randomIndex].lon;
-        } else if (state.wayPicking == "center"){
-            [lat, lng] = getCenterOfWay(element);
+        } else if (state.wayPicking == "center" || type =="relation"){
+            console.log(element);
+            lat = element.center.lat;
+            lng = element.center.lon;
+            //[lat, lng] = getCenterOfWay(element);
         }
-    }
-    else if(type == "relation"){
-        lat = element.bounds.minlat + (element.bounds.maxlat - element.bounds.minlat)/2;
-        lng = element.bounds.minlon + (element.bounds.maxlon - element.bounds.minlon)/2;
     }
     else{
         console.log("Unknown type: " + type);
@@ -563,7 +428,7 @@ function convertElementToCustomCoordinate(element){
     }};
 }
 
-function downloadUnpannedUncheckedJsonFile(){
+function getUnpannedUncheckedJson(){
     const jsonFile = {
         "name": "out",
         customCoordinates: outputGeoJsonFeatures.map((element, i) => {
@@ -572,6 +437,11 @@ function downloadUnpannedUncheckedJsonFile(){
             return returnObject;
         }),
     };
+    return jsonFile;
+}
+
+function downloadUnpannedUncheckedJsonFile(){
+    const jsonFile = getUnpannedUncheckedJson();
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonFile));
     const downloadAnchorNode = document.createElement("a");
     downloadAnchorNode.setAttribute("href", dataStr);
@@ -622,7 +492,7 @@ const dateToday = new Date().getFullYear() + "-" + ("0" + (new Date().getMonth()
 const settings = useStorage("mapcheckr_settings", {
     radius: 50,
     filterByGen: {
-        1: false,
+        1: true,
         23: true,
         4: true,
     },
@@ -632,10 +502,10 @@ const settings = useStorage("mapcheckr_settings", {
     },
     rejectUnofficial: true,
     rejectNoDescription: false,
-    rejectNoLinks: true,
-    rejectNoLinksIfNoHeading: true,
-    updateCoordinates: false,
-    updatePanoIDs: false,
+    rejectNoLinks: false,
+    rejectNoLinksIfNoHeading: false,
+    updateCoordinates: true,
+    updatePanoIDs: true,
     removeNearby: false,
     nearbyRadius: 10,
     heading: {
@@ -687,7 +557,8 @@ const initialState = {
     tooClose: 0,
     osmQueryStarted: 0,
     osmDataGotCounter: 0,
-    wayPicking: "random",
+    wayPicking: "center",
+    updatePanning: false,
 
 };
 
@@ -721,6 +592,11 @@ const resetState = () => {
         isolated: [],
     };
     allRejectedLocs.length = 0;
+};
+
+const debug = () => {
+    console.log("resolvedLocs", resolvedLocs);
+    console.log("mapToCheck", mapToCheck);
 };
 
 const error = ref("");
@@ -771,6 +647,7 @@ Array.prototype.chunk = function (n) {
 
 const start = async () => {
     const chunkSize = 500;
+    const copy_of_mapToCheck = [...mapToCheck];
     for (let locationGroup of mapToCheck.chunk(chunkSize)) {
         const responses = await Promise.allSettled(locationGroup.map((l) => SVreq(l, settings.value)));
         for (let response of responses) {
@@ -778,6 +655,7 @@ const start = async () => {
                 resolvedLocs.push(response.value);
                 state.success++;
             } else {
+                console.log(response.value, "reeeesponse.value because not fullfilled");
                 switch (response.reason.reason) {
                     case "SV_NOT_FOUND":
                         rejectedLocs.SVNotFound.push(response.reason);
@@ -823,9 +701,11 @@ const start = async () => {
         ...rejectedLocs.outOfDateRange,
         ...rejectedLocs.isolated,
     ];
-
     state.finished = true;
 };
+
+
+
 
 // Import
 document.addEventListener("paste", (evt) => {
@@ -843,6 +723,7 @@ const readFile = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
         checkJSON(e.target.result);
+        console.log(e.target.result);
     };
     reader.readAsText(file);
 };
@@ -852,13 +733,19 @@ const hasLatLng = (objectArray) =>
 
 const checkJSON = (data) => {
     try {
-        let mapData = JSON.parse(data);
+        let mapData = {};
+        if (typeof data === "string") {
+            mapData = JSON.parse(data);
+        } else {
+            mapData = data;
+        }
         if (mapData.hasOwnProperty("customCoordinates")) {
             mapData = [...mapData.customCoordinates];
         }
         if (!hasLatLng(mapData)) {
             error.value = "Invalid map data";
             state.loaded = false;
+            console.log("Invalid map data");
             return;
         }
 
@@ -869,6 +756,7 @@ const checkJSON = (data) => {
     } catch (err) {
         state.loaded = false;
         error.value = "Invalid map data";
+        console.log(err)
     }
 };
 

@@ -1,11 +1,37 @@
 const SV = new google.maps.StreetViewService();
 
+function calculate_heading(lat1, lon1, lat2, lon2) {
+    const radians = function(degrees) {
+        return degrees * Math.PI / 180;
+    };
+    const degrees = function(radians) {
+        return radians * 180 / Math.PI;
+    };
+    let delta_lat = radians(lat2 - lat1);
+    let delta_lon = radians(lon2 - lon1);
+    let heading = degrees(Math.atan2(delta_lon, delta_lat));
+    heading = (heading + 360) % 360;
+    return heading;
+}
+
+
+
+
 export default function SVreq(loc, settings) {
     return new Promise(async (resolve, reject) => {
         if (!loc.panoId) {
-            await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
+            let returnLoc = await SV.getPanorama({
+                location: {lat: loc.lat, lng: loc.lng},
+                preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
+                source: google.maps.StreetViewSource.OUTDOOR, // Get outdoor panoramas
+                radius: settings.radius // Search within a 5000-meter radius
+              },checkPano).catch((e) =>
                 reject({ loc, reason: e.message })
             );
+            loc.panoId = returnLoc.data.location.pano;
+            loc.lat = returnLoc.data.location.latLng.lat();
+            loc.lng = returnLoc.data.location.latLng.lng();
+            loc.description = returnLoc.data.location.description;
         } else {
             await SV.getPanoramaById(loc.panoId, checkPano).catch((e) => reject({ loc, reason: e.message }));
         }
@@ -46,8 +72,15 @@ export default function SVreq(loc, settings) {
 
             // Update coordinates
             if (settings.updateCoordinates) {
+                let oldLat = loc.lat;
+                let oldLng = loc.lng;
+                let newLat = res.location.latLng.lat();
+                let newLng = res.location.latLng.lng();
+
                 loc.lat = res.location.latLng.lat();
                 loc.lng = res.location.latLng.lng();
+                if(settings.updatePanning)
+                    loc.heading = calculate_heading(newLat, newLng, oldLat, oldLng);
             }
 
             // Update to latest pano
