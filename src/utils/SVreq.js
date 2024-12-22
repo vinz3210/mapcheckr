@@ -3,7 +3,7 @@ const SV = new google.maps.StreetViewService();
 export default function SVreq(loc, settings) {
     return new Promise(async (resolve, reject) => {
         if (!loc.panoId) {
-            if(settings.changeToOfficial) {
+            if(settings.changeToOfficial && settings.rejectUnofficial) {
                 let returnLoc = await SV.getPanorama({
                     location: {lat: loc.lat, lng: loc.lng},
                     preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
