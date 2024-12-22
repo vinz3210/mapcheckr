@@ -3,9 +3,30 @@ const SV = new google.maps.StreetViewService();
 export default function SVreq(loc, settings) {
     return new Promise(async (resolve, reject) => {
         if (!loc.panoId) {
-            await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
-                reject({ loc, reason: e.message })
-            );
+            if(settings.changeToOfficial) {
+                let returnLoc = await SV.getPanorama({
+                    location: {lat: loc.lat, lng: loc.lng},
+                    preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
+                    source: google.maps.StreetViewSource.OUTDOOR, // Get outdoor panoramas
+                    radius: settings.radius // Search within a 5000-meter radius
+                  },checkPano).catch((e) =>
+                    reject({ loc, reason: e.message })
+                );
+                if(returnLoc) {
+                    loc.panoId = returnLoc.data.location.pano;
+                    loc.lat = returnLoc.data.location.latLng.lat();
+                    loc.lng = returnLoc.data.location.latLng.lng();
+                    return resolve(loc);
+                } else {
+                    await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
+                        reject({ loc, reason: e.message })
+                    );
+                }
+            } else {
+                await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
+                    reject({ loc, reason: e.message })
+                );
+            }
         } else {
             await SV.getPanoramaById(loc.panoId, checkPano).catch((e) => reject({ loc, reason: e.message }));
         }
