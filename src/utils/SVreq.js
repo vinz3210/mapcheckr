@@ -7,7 +7,7 @@ export default function SVreq(loc, settings) {
                 let returnLoc = await SV.getPanorama({
                     location: {lat: loc.lat, lng: loc.lng},
                     preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
-                    source: google.maps.StreetViewSource.OUTDOOR, // Get outdoor panoramas
+                    sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
                     radius: settings.radius // Search within a 5000-meter radius
                   },checkPano).catch((e) =>
                     reject({ loc, reason: e.message })
