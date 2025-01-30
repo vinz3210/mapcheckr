@@ -2,6 +2,8 @@ const SV = new google.maps.StreetViewService();
 
 export default function SVreq(loc, settings) {
     return new Promise(async (resolve, reject) => {
+        let svNotFoundRetry = false;
+
         if (!loc.panoId) {
             if(settings.changeToOfficial && settings.rejectUnofficial) {
                 let returnLoc = await SV.getPanorama({
@@ -32,7 +34,21 @@ export default function SVreq(loc, settings) {
         }
 
         function checkPano(res, status) {
-            if (status != google.maps.StreetViewStatus.OK) return reject({ ...loc, reason: "SV_NOT_FOUND" });
+            if (status != google.maps.StreetViewStatus.OK) {
+                if (svNotFoundRetry) {
+                    return reject({ loc, reason: "SV_NOT_FOUND" });
+                } else {
+                    svNotFoundRetry = true;
+                    return SV.getPanorama({
+                        location: {lat: loc.lat, lng: loc.lng},
+                        preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
+                        sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
+                        radius: settings.radius // Search within a 5000-meter radius
+                    }, checkPano).catch((e) =>
+                        reject({ loc, reason: e.message })
+                    );
+                }
+            }
 
             if (settings.rejectUnofficial) {
                 if (res.location.pano.length != 22) return reject({ ...loc, reason: "UNOFFICIAL" });
