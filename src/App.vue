@@ -126,6 +126,14 @@
                         />
                         <hr />
                     </div>
+                    <div v-if="settings.rejectUnofficial">
+                        <Checkbox
+                            v-model:checked="settings.changeToOfficial"
+                            label="Change unofficial to official"
+                            optText="Change unofficial locations to official within the radius."
+                        />
+                        <hr />
+                    </div>
 
                     Radius<input type="number" v-model.number="settings.radius" @change="handleRadiusInput" />m<br />
                     <small>Radius in which to search for a non-panoID'ed panorama.</small>
