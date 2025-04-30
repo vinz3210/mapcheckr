@@ -100,7 +100,7 @@
                                 <label>To :</label>
                                 <input
                                     type="month"
-                                    v-model="settings.filterByDate.to"
+                                    v-model="dateToday"
                                     min="2007-01"
                                     :max="dateToday"
                                     @change="handleDate($event, 'to')"
