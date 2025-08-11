@@ -5,27 +5,37 @@ export default function SVreq(loc, settings) {
         let svNotFoundRetry = false;
 
         if (!loc.panoId) {
-            if(settings.changeToOfficial && settings.rejectUnofficial) {
+            if(true) {
                 let returnLoc = await SV.getPanorama({
                     location: {lat: loc.lat, lng: loc.lng},
                     preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
                     sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
-                    radius: settings.radius // Search within a 5000-meter radius
+                    radius: 1 // Search within a 1-meter radius
                   },checkPano).catch((e) =>
                     reject({ loc, reason: e.message })
                 );
                 if(returnLoc) {
+                    // If returnLoc.data.time exists, return an array of locs for each pano. date in form of YYYY-MM
+                    if (returnLoc.data.time && Array.isArray(returnLoc.data.time)) {
+                        const locs = returnLoc.data.time.map((t) => ({
+                            ...loc,
+                            panoId: t.pano,
+                            panoDate: t.Jz.toISOString().slice(0, 7), // Format date to YYYY-MM
+                        }));
+                        return resolve(locs);
+                    }
                     loc.panoId = returnLoc.data.location.pano;
                     loc.lat = returnLoc.data.location.latLng.lat();
                     loc.lng = returnLoc.data.location.latLng.lng();
-                    return resolve(loc);
+                    loc.panoDate = Date.parse(returnLoc.data.imageDate) ? returnLoc.data.imageDate : new Date(returnLoc.data.imageDate).toISOString().slice(0, 7); // Format date to YYYY-MM
+                    return resolve([loc]);
                 } else {
-                    await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
+                    await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), 1, checkPano).catch((e) =>
                         reject({ loc, reason: e.message })
                     );
                 }
             } else {
-                await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), settings.radius, checkPano).catch((e) =>
+                await SV.getPanoramaByLocation(new google.maps.LatLng(loc.lat, loc.lng), 1, checkPano).catch((e) =>
                     reject({ loc, reason: e.message })
                 );
             }
@@ -43,97 +53,59 @@ export default function SVreq(loc, settings) {
                         location: {lat: loc.lat, lng: loc.lng},
                         preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
                         sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
-                        radius: settings.radius // Search within a 5000-meter radius
+                        radius: 1 // Search within a 1-meter radius
                     }, checkPano).catch((e) =>
                         reject({ loc, reason: e.message })
                     );
                 }
             }
 
-            if (settings.rejectUnofficial) {
-                if (res.location.pano.length != 22) return reject({ ...loc, reason: "UNOFFICIAL" });
-                if (settings.rejectNoDescription && !res.location.description && !res.location.shortDescription)
-                    return reject({ ...loc, reason: "NO_DESCRIPTION" });
+            // If res.time exists, return an array of locs for each pano
+            if (res.time && Array.isArray(res.time)) {
+                const locs = res.time.map((t) => {
+                    // Add 2 days to avoid timezone issues at the start of the month
+                    let all_keys = Object.keys(t);
+                    // get keys that have two letters and end with z
+                    let twoLetterKeys = all_keys.filter(key => key.length === 2 && key.endsWith('z'));
+                    if (twoLetterKeys.length === 0) {
+                        console.warn("No valid date key found in pano data", t);
+                        return reject({ loc, reason: "NO_DATE" });
+                    }
+                    
+                    var dateValue = t[twoLetterKeys[0]]; // Get the first valid date value
+                    if (!dateValue) {
+                        console.warn("No date value found in pano data", t);
+                        return reject({ loc, reason: "NO_DATE" });
+                    }
+                    let mapcheckedPanoDate = null;
+                    if (dateValue) {
+                        const date = new Date(dateValue);
+                        if (!isNaN(date.getTime())) {
+                            date.setDate(date.getDate() + 2);
+                            mapcheckedPanoDate = date.toISOString().slice(0, 7); // Format date to YYYY-MM
+                        }
+                    }
+                    return {
+                        ...loc,
+                        panoId: t.pano,
+                        mapcheckedPanoDate, // Will be null if invalid
+                    };
+                });
+                return resolve(locs);
             }
 
-            const cameraGeneration = getCameraGeneration(res);
-            const isPanoID = loc.panoId ? true : false;
-            const isPanned = loc.heading !== 0;
+            if (res.location.pano.length != 22) return reject({ ...loc, reason: "UNOFFICIAL" });
+            
 
-            // Filter by gen
-            if (!settings.filterByGen[cameraGeneration]) {
-                return reject({ ...loc, reason: "WRONG_GENERATION" });
-            }
-
-            // Filter by date
-            if (
-                Date.parse(res.imageDate) < Date.parse(settings.filterByDate.from) ||
-                Date.parse(res.imageDate) > Date.parse(settings.filterByDate.to)
-            ) {
-                return reject({ ...loc, reason: "OUT_OF_DATE_RANGE" });
-            }
-
-            // Filter by panorama links
-            if (settings.rejectNoLinks && res.links.length === 0) {
-                return reject({ ...loc, reason: "ISOLATED" });
-            }
-            if (settings.rejectNoLinksIfNoHeading && res.links.length === 0 && !isPanned) {
-                return reject({ ...loc, reason: "ISOLATED" });
-            }
 
             // Update coordinates
-            if (settings.updateCoordinates) {
-                loc.lat = res.location.latLng.lat();
-                loc.lng = res.location.latLng.lng();
-            }
+        
+            loc.lat = res.location.latLng.lat();
+            loc.lng = res.location.latLng.lng();
+        
 
-            // Update to latest pano
-            if (settings.updatePanoIDs) {
-                loc.panoId = res.time[res.time.length - 1].pano;
-            }
 
-            if (
-                res.links.length !== 0 &&
-                ((settings.heading.filterBy.panoID && isPanoID) || (settings.heading.filterBy.nonPanoID && !isPanoID)) &&
-                ((settings.heading.filterBy.panned && isPanned) || (settings.heading.filterBy.unpanned && !isPanned))
-            ) {
-                // Set heading
-                let heading = 0;
-
-                if (res.links.length === 1) {
-                    heading = getHeading(settings.heading.directionBy["DEAD_END"], res);
-                } else if (cameraGeneration) {
-                    heading = getHeading(settings.heading.directionBy[cameraGeneration], res);
-                }
-
-                if (settings.heading.randomInRange) {
-                    heading += randomInRange(settings.heading.range[0], settings.heading.range[1]);
-                } else {
-                    heading += Math.random() < 0.5 ? settings.heading.range[0] : settings.heading.range[1];
-                }
-
-                loc.heading = heading;
-
-                // Set pitch
-                if (settings.pitch.updatePitch) {
-                    if (settings.pitch.randomInRange) {
-                        loc.pitch = randomInRange(settings.pitch.range[0], settings.pitch.range[1]);
-                    } else {
-                        loc.pitch = Math.random() < 0.5 ? settings.pitch.range[0] : settings.pitch.range[1];
-                    }
-                }
-
-                // Set zoom
-                if (settings.zoom.updateZoom) {
-                    if (settings.zoom.randomInRange) {
-                        loc.zoom = randomInRange(settings.zoom.range[0], settings.zoom.range[1]);
-                    } else {
-                        loc.zoom = Math.random() < 0.5 ? settings.zoom.range[0] : settings.zoom.range[1];
-                    }
-                }
-            }
-
-            resolve(loc);
+            resolve([loc]);
         }
     });
 }
@@ -152,33 +124,5 @@ function getCameraGeneration(res) {
     }
 }
 
-function getHeading(direction, res) {
-    const link = parseInt(res.links[0].heading);
-    const forward = res.tiles.centerHeading;
-    const backward = (res.tiles.centerHeading + 180) % 360;
-    switch (direction) {
-        case "link":
-            return link;
-        case "forward":
-            return forward;
-        case "backward":
-            return backward;
-        case "any":
-            const randomInt = randomInRange(1, 3);
-            return randomInt === 1 ? link : randomInt === 2 ? forward : backward;
-    }
-}
-
 const randomInRange = (min, max) => Math.round((Math.random() * (max - min + 1) + min) * 100) / 100;
 
-// const closest = (arr, num) => arr.reduce((a, b) => (Math.abs(b - num) < Math.abs(a - num) ? b : a));
-
-// const difference = (a, b) => {
-//     const d = Math.abs(a - b);
-//     return d > 180 ? 360 - d : d;
-// };
-
-// const getNearestHeading = (bs, a) => {
-//     const ds = bs.map((b) => difference(a, b.heading));
-//     return bs[ds.indexOf(Math.min.apply(null, ds))].heading;
-// };

@@ -12,7 +12,7 @@ const { data, isRejected } = defineProps({
 
 const exportToJsonFile = () => {
     const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-    const fileName = `${data.length} ${isRejected ? "rejected" : "resolved"} location${data.length > 1 ? "s" : ""}.json`;
+    const fileName = `${data.customCoordinates.length} ${isRejected ? "rejected" : "resolved"} location${data.customCoordinates.length > 1 ? "s" : ""}.json`;
     const linkElement = document.createElement("a");
     linkElement.setAttribute("href", dataUri);
     linkElement.setAttribute("download", fileName);
