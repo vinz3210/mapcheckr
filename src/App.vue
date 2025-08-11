@@ -330,7 +330,14 @@ const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
     let lon = minlon;
     while (lat < maxlat) {
         while (lon < maxlon) {
-            boxes.push([lat, lon, lat + degreestoadd, lon + degreestoadd]);
+            let max_lat = lat + degreestoadd;
+            let max_lon = lon + degreestoadd;
+            if (max_lat > 180)
+                max_lat = 180;
+            if (max_lon > 180)
+                max_lon = 180;
+                
+            boxes.push([lat, lon, max_lat, max_lon]);
             lon += degreestoadd;
         }
         lon = minlon;
@@ -512,6 +519,7 @@ const settings = useStorage("mapcheckr_settings", {
     rejectNoDescription: false,
     rejectNoLinks: false,
     rejectNoLinksIfNoHeading: false,
+    updatePanning: false,
     updateCoordinates: true,
     updatePanoIDs: true,
     removeNearby: false,
@@ -655,7 +663,8 @@ Array.prototype.chunk = function (n) {
 
 const start = async () => {
     const chunkSize = 500;
-    const copy_of_mapToCheck = [...mapToCheck];
+    // make copy of mapToCheck
+    const copy_of_mapToCheck = JSON.parse(JSON.stringify(mapToCheck));
     for (let locationGroup of mapToCheck.chunk(chunkSize)) {
         const responses = await Promise.allSettled(locationGroup.map((l) => SVreq(l, settings.value)));
         for (let response of responses) {
@@ -701,6 +710,11 @@ const start = async () => {
         resolvedLocs.push(...newArr);
     }
 
+    // After processing, optionally set heading by mapping resolved locations to original inputs
+    if (settings.value.updatePanning) {
+        resolvedLocs = panAccordingly(copy_of_mapToCheck, resolvedLocs);
+    }
+    console.log(1)
     allRejectedLocs = [
         ...rejectedLocs.SVNotFound,
         ...rejectedLocs.unofficial,
@@ -709,6 +723,11 @@ const start = async () => {
         ...rejectedLocs.outOfDateRange,
         ...rejectedLocs.isolated,
     ];
+    console.log(2)
+    allRejectedLocs = allRejectedLocs.map(location =>{
+        return location.loc
+    });
+    console.log(3)
     state.finished = true;
 };
 
@@ -798,6 +817,47 @@ const haversineDistance = (mk1, mk2) => {
 };
 
 const pluralize = (text, count) => (count > 1 ? text + "s" : text);
+
+// --- Heading utilities (post-processing) ---
+function radians(deg) {
+    return (deg * Math.PI) / 180;
+}
+function degrees(rad) {
+    return (rad * 180) / Math.PI;
+}
+function calculateHeading(newLoc, oldLoc) {
+    // Accept objects with lat/lng directly
+    const lat1 = newLoc.lat;
+    const lon1 = newLoc.lng;
+    const lat2 = oldLoc.lat;
+    const lon2 = oldLoc.lng;
+    console.log("lat1", lat1, "lon1", lon1, "lat2", lat2, "lon2", lon2);
+    let dLat = radians(lat2 - lat1);
+    let dLon = radians(lon2 - lon1);
+    let heading = degrees(Math.atan2(dLon, dLat));
+    heading = (heading + 360) % 360;
+    return heading;
+}
+
+// Map resolved locations to their original entries and set heading accordingly
+function panAccordingly(oldArray, newArray) {
+    console.log("starting to pan Accordingly");
+    console.log("oldArray", oldArray);
+    console.log("newArray", newArray);
+    let oldDict = {};
+    oldArray.forEach((loc) => {
+        oldDict[loc.extra.index] = loc;
+    });
+    console.log
+    newArray = newArray.map((loc) => {
+        const oldLoc = oldDict[loc.extra.index];
+        if (oldLoc) {
+            loc.heading = calculateHeading(loc, oldLoc);
+        }
+        return loc;
+    });
+    return newArray;
+}
 </script>
 
 <style>

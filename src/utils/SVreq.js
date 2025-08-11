@@ -19,7 +19,7 @@ function calculate_heading(lat1, lon1, lat2, lon2) {
 
 export default function SVreq(loc, settings) {
     return new Promise(async (resolve, reject) => {
-        let svNotFoundRetry = false;
+        var svNotFoundRetry = false;
 
         if (!loc.panoId) {
             let returnLoc = await SV.getPanorama({
