@@ -351,8 +351,8 @@ const getOsmQueryLocs = () => {
     isosArr.forEach((iso) => {
         smallerCountryBoundingBoxes[iso] = convertBoundingBoxToSmallerBoxes(isoToBoundingBox(iso.trim()));
         allSmallBoxesCounter += smallerCountryBoundingBoxes[iso].length;
+        getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
     });
-    getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
     
 };
 
