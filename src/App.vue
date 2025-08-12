@@ -48,15 +48,24 @@
                 <div v-if="state.osmQueryRunning" class="container center">
                     <p><Badge :text=" state.osmDataGotCounter + '/' + allSmallBoxesCounter" /></p>
                 </div>
+                <div class="form__row">
+                    <label for="wayPicking">Way Picking</label>
+                </div>
+                <div class="form__row">
+                    <select id="wayPicking" v-model="state.wayPicking">
+                        <option value="center">Center</option>
+                        <option value="geom">Geom</option>
+                    </select>
+                </div>
                 <div class="flex-center wrap space-between p-05">
                     <div class="flex-center wrap gap-02">
                         <!--CopyToClipboard :data="resolvedLocs" /-->
                         <Button @click="getOsmQueryLocs" text="GetLocs" />
                     </div>
-                    <!--div class="flex-center wrap gap-02">
-                        <Button @click="downloadGeoJsonFile" text="DownloadGeoJson" />
-                    </div>
                     <div class="flex-center wrap gap-02">
+                        <Button @click="downloadGeoJsonFile(outputGeoJsonFeatures)" text="DownloadGeoJson" />
+                    </div>
+                    <!--div class="flex-center wrap gap-02">
                         <Button @click="downloadUnpannedUncheckedJsonFile" text="DownloadUnpannedUncheckedJson" />
                     </div-->
                 </div>
@@ -308,7 +317,9 @@ const {
     panAccordingly,
 } = useMapState();
 
-const { getOsmQueryLocs } = useOverpass(state, checkJSON, handleClickStart);
+import { downloadGeoJsonFile } from "@/utils/file.js";
+
+const { getOsmQueryLocs, outputGeoJsonFeatures } = useOverpass(state, checkJSON, handleClickStart);
 
 const dateToday = new Date().getFullYear() + "-" + ("0" + (new Date().getMonth() + 1)).slice(-2);
 

@@ -1,14 +1,15 @@
+import { ref } from "vue";
 import { overpass } from "overpass-ts";
 import { isoToBoundingBox, convertBoundingBoxToSmallerBoxes } from "../utils/geo.js";
 
 export function useOverpass(state, checkJSON, handleClickStart) {
-    let outputGeoJsonFeatures = [];
+    const outputGeoJsonFeatures = ref([]);
     let allSmallBoxesCounter = 0;
 
     const getUnpannedUncheckedJson = () => {
         const jsonFile = {
             "name": "out",
-            customCoordinates: outputGeoJsonFeatures.map((element, i) => {
+            customCoordinates: outputGeoJsonFeatures.value.map((element, i) => {
                 let returnObject =  convertElementToCustomCoordinate(element);
                 returnObject.extra.index = i;
                 return returnObject;
@@ -48,7 +49,7 @@ export function useOverpass(state, checkJSON, handleClickStart) {
     async function getOsmQueryLocsForBboxesWithoutISO (query, bboxes) {
         if (bboxes.length == 0){
 
-            console.log(outputGeoJsonFeatures)
+            console.log(outputGeoJsonFeatures.value)
 
 
             console.log("finished 1")
@@ -69,9 +70,9 @@ export function useOverpass(state, checkJSON, handleClickStart) {
                 console.log(data)
                 data.elements.forEach((element) => {
 
-                    outputGeoJsonFeatures.push(element)
+                    outputGeoJsonFeatures.value.push(element)
                 })
-                console.log(outputGeoJsonFeatures.length);
+                console.log(outputGeoJsonFeatures.value.length);
                 state.osmDataGotCounter++;
                 getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
             }
@@ -82,7 +83,7 @@ export function useOverpass(state, checkJSON, handleClickStart) {
     async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
         if (bboxes.length == 0){
 
-            console.log(outputGeoJsonFeatures)
+            console.log(outputGeoJsonFeatures.value)
 
 
             console.log("finished 1")
@@ -104,9 +105,9 @@ export function useOverpass(state, checkJSON, handleClickStart) {
                 console.log(data)
                 data.elements.forEach((element) => {
 
-                    outputGeoJsonFeatures.push(element)
+                    outputGeoJsonFeatures.value.push(element)
                 })
-                console.log(outputGeoJsonFeatures.length);
+                console.log(outputGeoJsonFeatures.value.length);
                 state.osmDataGotCounter++;
                 getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
             }
@@ -121,7 +122,7 @@ export function useOverpass(state, checkJSON, handleClickStart) {
     }
 
     const getOsmQueryLocs = () => {
-        outputGeoJsonFeatures = [];
+        outputGeoJsonFeatures.value = [];
         state.osmQueryRunning = true;
         state.osmDataGotCounter = 0;
         allSmallBoxesCounter = 0;
@@ -145,5 +146,6 @@ export function useOverpass(state, checkJSON, handleClickStart) {
 
     return {
         getOsmQueryLocs,
+        outputGeoJsonFeatures,
     };
 }
