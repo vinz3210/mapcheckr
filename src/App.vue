@@ -292,6 +292,7 @@ import { useMapState } from "./composables/useMapState.js";
 import { useOverpass } from "./composables/useOverpass.js";
 import SVreq from "@/utils/SVreq";
 import { pluralize } from "@/utils/text.js";
+import { downloadGeoJsonFile } from "@/utils/file.js";
 import Button from "@/components/Elements/Button.vue";
 import Checkbox from "@/components/Elements/Checkbox.vue";
 import Badge from "@/components/Elements/Badge.vue";
@@ -316,8 +317,6 @@ const {
     removeNearby,
     panAccordingly,
 } = useMapState();
-
-import { downloadGeoJsonFile } from "@/utils/file.js";
 
 const { getOsmQueryLocs, outputGeoJsonFeatures } = useOverpass(state, checkJSON, handleClickStart);
 
