@@ -278,13 +278,11 @@
 </template>
 
 <script setup>
-var global = global || window;
-
-import { reactive, ref, computed } from "vue";
-import { useStorage } from "@vueuse/core";
+import { computed } from "vue";
+import { useMapState } from "./composables/useMapState.js";
+import { useOverpass } from "./composables/useOverpass.js";
 import SVreq from "@/utils/SVreq";
-
-import Slider from "@vueform/slider";
+import { pluralize } from "@/utils/text.js";
 import Button from "@/components/Elements/Button.vue";
 import Checkbox from "@/components/Elements/Checkbox.vue";
 import Badge from "@/components/Elements/Badge.vue";
@@ -293,304 +291,26 @@ import CopyToClipboard from "@/components/CopyToClipboard.vue";
 import ExportToJSON from "@/components/ExportToJSON.vue";
 import ExportToCSV from "./components/ExportToCSV.vue";
 import Distribution from "@/components/CountryDistribution.vue";
-//import { haversineDistance } from "@/utils/haversineDistance";
-import countryBoundingBoxes from './assets/countryBoundingBoxes.json'
-import { overpass } from "overpass-ts";
 
+const {
+    settings,
+    state,
+    customMap,
+    mapToCheck,
+    resolvedLocs,
+    rejectedLocs,
+    allRejectedLocs,
+    error,
+    resetState,
+    checkJSON,
+    loadFromJSON,
+    removeNearby,
+    panAccordingly,
+} = useMapState();
 
-
-var outputGeoJsonFeatures = [];
-var finishedGettingOSMData = false;
-var allSmallBoxesCounter = 0;
-
-
-
-
-const isoToBoundingBox = (iso) => {
-    console.log(iso)
-    const bbox = countryBoundingBoxes[iso].boundingBox;
-    console.log(bbox);
-    return bbox;
-};
-const isoToCountryName = (iso) => {
-    console.log(iso);
-    console.log(countryBoundingBoxes);
-    console.log(countryBoundingBoxes[iso]);
-    return countryBoundingBoxes[iso]["name"];
-};
-
-const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
-    const degreestoadd = parseFloat(document.getElementById("degrees").value);
-    const minlat = boundingbox["minLat"];
-    const minlon = boundingbox["minLng"];
-    const maxlat = boundingbox["maxLat"];
-    const maxlon = boundingbox["maxLng"];
-    const boxes = [];
-    let lat = minlat;
-    let lon = minlon;
-    while (lat < maxlat) {
-        while (lon < maxlon) {
-            let max_lat = lat + degreestoadd;
-            let max_lon = lon + degreestoadd;
-            if (max_lat > 180)
-                max_lat = 180;
-            if (max_lon > 180)
-                max_lon = 180;
-                
-            boxes.push([lat, lon, max_lat, max_lon]);
-            lon += degreestoadd;
-        }
-        lon = minlon;
-        lat += degreestoadd;
-    }
-    return boxes;
-};
-
-const getOsmQueryLocs = () => {
-    outputGeoJsonFeatures = [];
-    state.osmQueryRunning = true;
-    state.osmDataGotCounter = 0;
-    allSmallBoxesCounter = 0;
-    const query = document.getElementById("query").value;
-    const isos = document.getElementById("isos").value;
-    if (isos === "") {
-        const worldBoundingBox = { minLat: -90, minLng: -180, maxLat: 90, maxLng: 180 };
-        const smallerWorldBoundingBoxes = convertBoundingBoxToSmallerBoxes(worldBoundingBox);
-        allSmallBoxesCounter = smallerWorldBoundingBoxes.length;
-        getOsmQueryLocsForBboxesWithoutISO(query, smallerWorldBoundingBoxes);
-    } else {
-        const isosArr = isos.split(",").map(x=>x.trim().toUpperCase());
-        var smallerCountryBoundingBoxes = {}
-        isosArr.forEach((iso) => {
-            smallerCountryBoundingBoxes[iso] = convertBoundingBoxToSmallerBoxes(isoToBoundingBox(iso.trim()));
-            allSmallBoxesCounter += smallerCountryBoundingBoxes[iso].length;
-            getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
-        });
-    }
-};
-
-async function getOsmQueryLocsByISO (query, smallerCountryBoundingBoxes){
-    Object.keys(smallerCountryBoundingBoxes).forEach((iso)=>{
-        getOsmQueryLocsForBboxes(query, smallerCountryBoundingBoxes[iso], iso);
-    });
-}
-
-async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
-    if (bboxes.length == 0){
-        
-        console.log(outputGeoJsonFeatures)
-
-
-        console.log("finished 1")
-        state.osmQueryRunning = false;
-        const jsonFile = getUnpannedUncheckedJson();
-        console.log("unpannedUnchecked.json", jsonFile);
-        checkJSON(jsonFile);
-        handleClickStart()
-
-        return;
-    }
-    let outputForm = state.wayPicking == "center"? "center":"geom";
-    const osmQuery = `[out:json];
-    area["ISO3166-1"="${iso}"]->.searchArea;
-    ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
-    console.log(osmQuery);
-    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
-        response.json().then(data =>{
-            console.log(data)
-            data.elements.forEach((element) => {
-
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-            state.osmDataGotCounter++;
-            getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
-        }
-        );
-    });
-};
-
-async function getOsmQueryLocsForBboxesWithoutISO (query, bboxes) {
-    if (bboxes.length == 0){
-
-        console.log(outputGeoJsonFeatures)
-
-
-        console.log("finished 1")
-        state.osmQueryRunning = false;
-        const jsonFile = getUnpannedUncheckedJson();
-        console.log("unpannedUnchecked.json", jsonFile);
-        checkJSON(jsonFile);
-        handleClickStart()
-
-        return;
-    }
-    let outputForm = state.wayPicking == "center"? "center":"geom";
-    const osmQuery = `[out:json];
-    ${query}(${bboxes[0].join(",")}); out ${outputForm};`;
-    console.log(osmQuery);
-    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
-        response.json().then(data =>{
-            console.log(data)
-            data.elements.forEach((element) => {
-
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-            state.osmDataGotCounter++;
-            getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
-        }
-        );
-    });
-};
-
-function getCenterOfWay(way){
-    let lat = 0;
-    let lon = 0;
-    way.geometry.forEach((node)=>{
-        lat += node.lat;
-        lon += node.lon;
-    });
-    return [lat/way.geometry.length, lon/way.geometry.length];
-}
-
-function convertElementToCustomCoordinate(element){
-    let type = element.type;
-    let lat = 0;
-    let lng = 0;
-    if (type == "node"){
-        lat = element.lat;
-        lng = element.lon;
-    }
-    else if (type == "way"){
-        if(state.wayPicking == "random"){
-            let randomIndex = Math.floor(Math.random() * element.geometry.length);
-            lat = element.geometry[randomIndex].lat;
-            lng = element.geometry[randomIndex].lon;
-        } else if (state.wayPicking == "center" || type =="relation"){
-            console.log(element);
-            lat = element.center.lat;
-            lng = element.center.lon;
-            //[lat, lng] = getCenterOfWay(element);
-        }
-    }
-    else{
-        console.log("Unknown type: " + type);
-    }
-    let tags_to_include = document.getElementById("tags").value.split(",").map(x=>x.trim());
-    return {lat: lat, lng: lng, extra:{
-        tags: tags_to_include.map((tag)=>{return element.tags[tag]==undefined?"":tag+" - "+element.tags[tag]}).filter((tag)=>{return tag != ""}),
-    }};
-}
-
-function getUnpannedUncheckedJson(){
-    const jsonFile = {
-        "name": "out",
-        customCoordinates: outputGeoJsonFeatures.map((element, i) => {
-            let returnObject =  convertElementToCustomCoordinate(element);
-            returnObject.extra.index = i;
-            return returnObject;
-        }),
-    };
-    return jsonFile;
-}
-
-function downloadUnpannedUncheckedJsonFile(){
-    const jsonFile = getUnpannedUncheckedJson();
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonFile));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "unpannedUnchecked.json");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-}
-
-/*
-const getOsmQueryLocsForBbox = (query, bbox) => {
-    console.log(bbox);
-    const osmQuery = `[out:json]; ${query}(${bbox.join(",")}); out geom;`;
-    overpass(osmQuery).then((response) => {
-        response.json().then(data =>{
-            data.elements.forEach((element) => {
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-
-        }
-        );
-    });
-};
-*/
-
-const downloadGeoJsonFile = ()=>{
-    const geoJson = {
-        type: "FeatureCollection",
-        features: outputGeoJsonFeatures
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geoJson));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "data.geojson");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-}
-
-
-
-
-
+const { getOsmQueryLocs } = useOverpass(state, checkJSON, handleClickStart);
 
 const dateToday = new Date().getFullYear() + "-" + ("0" + (new Date().getMonth() + 1)).slice(-2);
-
-const settings = useStorage("mapcheckr_settings", {
-    radius: 50,
-    filterByGen: {
-        1: true,
-        23: true,
-        4: true,
-    },
-    filterByDate: {
-        from: "2008-01",
-        to: dateToday,
-    },
-    rejectUnofficial: true,
-    rejectNoDescription: false,
-    rejectNoLinks: false,
-    rejectNoLinksIfNoHeading: false,
-    updatePanning: false,
-    updateCoordinates: true,
-    updatePanoIDs: true,
-    removeNearby: false,
-    nearbyRadius: 10,
-    heading: {
-        range: [0, 0],
-        randomInRange: false,
-        filterBy: {
-            panned: false,
-            unpanned: false,
-            panoID: false,
-            nonPanoID: false,
-        },
-        directionBy: {
-            1: "forward",
-            23: "forward",
-            4: "forward",
-            DEAD_END: "link",
-        },
-    },
-    pitch: {
-        updatePitch: false,
-        range: [0, 0],
-        randomInRange: false,
-    },
-    zoom: {
-        updateZoom: false,
-        range: [0, 0],
-        randomInRange: false,
-    },
-});
 
 const areHeadingSettingsGood = computed(
     () =>
@@ -598,66 +318,6 @@ const areHeadingSettingsGood = computed(
         (settings.value.heading.filterBy.panned || settings.value.heading.filterBy.unpanned)
 );
 
-const initialState = {
-    loaded: false,
-    started: false,
-    finished: false,
-    step: 0,
-    success: 0,
-    SVNotFound: 0,
-    unofficial: 0,
-    noDescription: 0,
-    wrongGeneration: 0,
-    outOfDateRange: 0,
-    isolated: 0,
-    tooClose: 0,
-    osmQueryStarted: 0,
-    osmDataGotCounter: 0,
-    wayPicking: "center",
-    updatePanning: false,
-
-};
-
-const state = reactive({ ...initialState });
-
-const customMap = ref({});
-
-let mapToCheck = [];
-let resolvedLocs = [];
-let rejectedLocs = {
-    SVNotFound: [],
-    unofficial: [],
-    noDescription: [],
-    wrongGeneration: [],
-    outOfDateRange: [],
-    isolated: [],
-};
-let allRejectedLocs = [];
-
-const resetState = () => {
-    Object.assign(state, initialState);
-    customMap.value = {};
-    mapToCheck.length = 0;
-    resolvedLocs.length = 0;
-    rejectedLocs = {
-        SVNotFound: [],
-        unofficial: [],
-        noDescription: [],
-        wrongGeneration: [],
-        outOfDateRange: [],
-        isolated: [],
-    };
-    allRejectedLocs.length = 0;
-};
-
-const debug = () => {
-    console.log("resolvedLocs", resolvedLocs);
-    console.log("mapToCheck", mapToCheck);
-};
-
-const error = ref("");
-
-// Process
 const handleClickStart = () => {
     state.started = true;
     start();
@@ -771,133 +431,19 @@ const start = async () => {
     state.finished = true;
 };
 
-
-
-
-// Import
 document.addEventListener("paste", (evt) => {
     const data = evt.clipboardData.getData("text/plain");
     checkJSON(data);
 });
 
-const loadFromJSON = (e) => {
-    const files = e.target.files || e.dataTransfer.files;
-    if (!files.length) return;
-    readFile(files[0]);
-};
+document.addEventListener("dragover", (e) => {
+    e.preventDefault();
+});
 
-const readFile = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        checkJSON(e.target.result);
-        console.log(e.target.result);
-    };
-    reader.readAsText(file);
-};
-
-const hasLatLng = (objectArray) =>
-    objectArray.every((obj) => obj.hasOwnProperty("lat")) && objectArray.every((obj) => obj.hasOwnProperty("lng"));
-
-const checkJSON = (data) => {
-    try {
-        let mapData = {};
-        if (typeof data === "string") {
-            mapData = JSON.parse(data);
-        } else {
-            mapData = data;
-        }
-        if (mapData.hasOwnProperty("customCoordinates")) {
-            mapData = [...mapData.customCoordinates];
-        }
-        if (!hasLatLng(mapData)) {
-            error.value = "Invalid map data";
-            state.loaded = false;
-            console.log("Invalid map data");
-            return;
-        }
-
-        error.value = "";
-        customMap.value = { nbLocs: mapData.length };
-        mapToCheck = mapData;
-        state.loaded = true;
-    } catch (err) {
-        state.loaded = false;
-        error.value = "Invalid map data";
-        console.log(err)
-    }
-};
-
-const removeNearby = (arr, radius) => {
-    const newArr = [];
-    arr.forEach((point) => {
-        const hasClosePoint = newArr.some(
-            (found) => haversineDistance({ lat: point.lat, lng: point.lng }, { lat: found.lat, lng: found.lng }) < radius
-        );
-        if (!hasClosePoint) newArr.push(point);
-    });
-    return newArr;
-};
-
-const haversineDistance = (mk1, mk2) => {
-    const R = 6371.071;
-    const rlat1 = mk1.lat * (Math.PI / 180);
-    const rlat2 = mk2.lat * (Math.PI / 180);
-    const difflat = rlat2 - rlat1;
-    const difflon = (mk2.lng - mk1.lng) * (Math.PI / 180);
-    const km =
-        2 *
-        R *
-        Math.asin(
-            Math.sqrt(
-                Math.sin(difflat / 2) * Math.sin(difflat / 2) +
-                    Math.cos(rlat1) * Math.cos(rlat2) * Math.sin(difflon / 2) * Math.sin(difflon / 2)
-            )
-        );
-    return km * 1000;
-};
-
-const pluralize = (text, count) => (count > 1 ? text + "s" : text);
-
-// --- Heading utilities (post-processing) ---
-function radians(deg) {
-    return (deg * Math.PI) / 180;
-}
-function degrees(rad) {
-    return (rad * 180) / Math.PI;
-}
-function calculateHeading(newLoc, oldLoc) {
-    // Accept objects with lat/lng directly
-    const lat1 = newLoc.lat;
-    const lon1 = newLoc.lng;
-    const lat2 = oldLoc.lat;
-    const lon2 = oldLoc.lng;
-    console.log("lat1", lat1, "lon1", lon1, "lat2", lat2, "lon2", lon2);
-    let dLat = radians(lat2 - lat1);
-    let dLon = radians(lon2 - lon1);
-    let heading = degrees(Math.atan2(dLon, dLat));
-    heading = (heading + 360) % 360;
-    return heading;
-}
-
-// Map resolved locations to their original entries and set heading accordingly
-function panAccordingly(oldArray, newArray) {
-    console.log("starting to pan Accordingly");
-    console.log("oldArray", oldArray);
-    console.log("newArray", newArray);
-    let oldDict = {};
-    oldArray.forEach((loc) => {
-        oldDict[loc.extra.index] = loc;
-    });
-    console.log
-    newArray = newArray.map((loc) => {
-        const oldLoc = oldDict[loc.extra.index];
-        if (oldLoc) {
-            loc.heading = calculateHeading(loc, oldLoc);
-        }
-        return loc;
-    });
-    return newArray;
-}
+document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    loadFromJSON(e);
+});
 </script>
 
 <style>
