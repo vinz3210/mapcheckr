@@ -353,14 +353,20 @@ const getOsmQueryLocs = () => {
     allSmallBoxesCounter = 0;
     const query = document.getElementById("query").value;
     const isos = document.getElementById("isos").value;
-    const isosArr = isos.split(",").map(x=>x.trim().toUpperCase());
-    var smallerCountryBoundingBoxes = {}
-    isosArr.forEach((iso) => {
-        smallerCountryBoundingBoxes[iso] = convertBoundingBoxToSmallerBoxes(isoToBoundingBox(iso.trim()));
-        allSmallBoxesCounter += smallerCountryBoundingBoxes[iso].length;
-        getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
-    });
-    
+    if (isos === "") {
+        const worldBoundingBox = { minLat: -90, minLng: -180, maxLat: 90, maxLng: 180 };
+        const smallerWorldBoundingBoxes = convertBoundingBoxToSmallerBoxes(worldBoundingBox);
+        allSmallBoxesCounter = smallerWorldBoundingBoxes.length;
+        getOsmQueryLocsForBboxesWithoutISO(query, smallerWorldBoundingBoxes);
+    } else {
+        const isosArr = isos.split(",").map(x=>x.trim().toUpperCase());
+        var smallerCountryBoundingBoxes = {}
+        isosArr.forEach((iso) => {
+            smallerCountryBoundingBoxes[iso] = convertBoundingBoxToSmallerBoxes(isoToBoundingBox(iso.trim()));
+            allSmallBoxesCounter += smallerCountryBoundingBoxes[iso].length;
+            getOsmQueryLocsByISO(query, smallerCountryBoundingBoxes);
+        });
+    }
 };
 
 async function getOsmQueryLocsByISO (query, smallerCountryBoundingBoxes){
@@ -389,7 +395,7 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
     area["ISO3166-1"="${iso}"]->.searchArea;
     ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
     console.log(osmQuery);
-    await overpass(osmQuery).then((response) => {
+    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
         response.json().then(data =>{
             console.log(data)
             data.elements.forEach((element) => {
@@ -399,6 +405,40 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
             console.log(outputGeoJsonFeatures.length);
             state.osmDataGotCounter++;
             getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
+        }
+        );
+    });
+};
+
+async function getOsmQueryLocsForBboxesWithoutISO (query, bboxes) {
+    if (bboxes.length == 0){
+
+        console.log(outputGeoJsonFeatures)
+
+
+        console.log("finished 1")
+        state.osmQueryRunning = false;
+        const jsonFile = getUnpannedUncheckedJson();
+        console.log("unpannedUnchecked.json", jsonFile);
+        checkJSON(jsonFile);
+        handleClickStart()
+
+        return;
+    }
+    let outputForm = state.wayPicking == "center"? "center":"geom";
+    const osmQuery = `[out:json];
+    ${query}(${bboxes[0].join(",")}); out ${outputForm};`;
+    console.log(osmQuery);
+    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
+        response.json().then(data =>{
+            console.log(data)
+            data.elements.forEach((element) => {
+
+                outputGeoJsonFeatures.push(element)
+            })
+            console.log(outputGeoJsonFeatures.length);
+            state.osmDataGotCounter++;
+            getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
         }
         );
     });
