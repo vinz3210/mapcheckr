@@ -297,7 +297,27 @@ import Distribution from "@/components/CountryDistribution.vue";
 import countryBoundingBoxes from './assets/countryBoundingBoxes.json'
 import { overpass } from "overpass-ts";
 
-
+// Utility function to handle overpass requests with retry logic for 429 errors
+const overpassWithRetry = async (query, retryCount = 0) => {
+    try {
+        const response = await overpass(query);
+        return response;
+    } catch (error) {
+        // Check if it's a 429 (Too Many Requests) error
+        if (error.status === 429 || (error.message && error.message.includes('429'))) {
+            const waitTime = 5000 + (retryCount * 5000); // Base 5 seconds + 5 seconds per retry
+            console.log(`Received 429 error. Waiting ${waitTime / 1000} seconds before retry attempt ${retryCount + 1}...`);
+            
+            // Wait for the calculated time
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            
+            // Retry the request
+            return overpassWithRetry(query, retryCount + 1);
+        }
+        // If it's not a 429 error, rethrow it
+        throw error;
+    }
+};
 
 var outputGeoJsonFeatures = [];
 var finishedGettingOSMData = false;
@@ -395,19 +415,26 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
     area["ISO3166-1"="${iso}"]->.searchArea;
     ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
     console.log(osmQuery);
-    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
-        response.json().then(data =>{
-            console.log(data)
-            data.elements.forEach((element) => {
+    try {
+        await overpassWithRetry(osmQuery).then((response) => {
+            response.json().then(data =>{
+                console.log(data)
+                data.elements.forEach((element) => {
 
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-            state.osmDataGotCounter++;
-            getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
-        }
-        );
-    });
+                    outputGeoJsonFeatures.push(element)
+                })
+                console.log(outputGeoJsonFeatures.length);
+                state.osmDataGotCounter++;
+                getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
+            }
+            );
+        });
+    } catch (error) {
+        console.error('Error in overpass query:', error);
+        // Continue with next bbox on error
+        state.osmDataGotCounter++;
+        getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
+    }
 };
 
 async function getOsmQueryLocsForBboxesWithoutISO (query, bboxes) {
@@ -429,19 +456,26 @@ async function getOsmQueryLocsForBboxesWithoutISO (query, bboxes) {
     const osmQuery = `[out:json];
     ${query}(${bboxes[0].join(",")}); out ${outputForm};`;
     console.log(osmQuery);
-    await overpass(osmQuery, { endpoint: "https://overpass.mail.ru/api/interpreter" }).then((response) => {
-        response.json().then(data =>{
-            console.log(data)
-            data.elements.forEach((element) => {
+    try {
+        await overpassWithRetry(osmQuery).then((response) => {
+            response.json().then(data =>{
+                console.log(data)
+                data.elements.forEach((element) => {
 
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-            state.osmDataGotCounter++;
-            getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
-        }
-        );
-    });
+                    outputGeoJsonFeatures.push(element)
+                })
+                console.log(outputGeoJsonFeatures.length);
+                state.osmDataGotCounter++;
+                getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
+            }
+            );
+        });
+    } catch (error) {
+        console.error('Error in overpass query:', error);
+        // Continue with next bbox on error
+        state.osmDataGotCounter++;
+        getOsmQueryLocsForBboxesWithoutISO(query, bboxes.slice(1));
+    }
 };
 
 function getCenterOfWay(way){
