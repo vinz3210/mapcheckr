@@ -11,8 +11,13 @@ const { data, isRejected } = defineProps({
 });
 
 const exportToJsonFile = () => {
-    const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-    const fileName = `${data.customCoordinates.length} ${isRejected ? "rejected" : "resolved"} location${data.customCoordinates.length > 1 ? "s" : ""}.json`;
+    // if data is of type Array put it into an object under the key "customCoordinates"
+    let outputData = data;
+    if (Array.isArray(data)) {
+        outputData = { customCoordinates: data };
+    }
+    const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(outputData));
+    const fileName = `${outputData.customCoordinates.length} ${isRejected ? "rejected" : "resolved"} location${outputData.customCoordinates.length > 1 ? "s" : ""}.json`;
     const linkElement = document.createElement("a");
     linkElement.setAttribute("href", dataUri);
     linkElement.setAttribute("download", fileName);

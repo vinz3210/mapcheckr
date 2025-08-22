@@ -129,44 +129,64 @@ const handleClickStart = () => {
 
 const isDateValid = (dateStr) => !isNaN(new Date(dateStr));
 
-
-Array.prototype.chunk = function (n) {
-    if (!this.length) {
-        return [];
-    }
-    return [this.slice(0, n)].concat(this.slice(n).chunk(n));
-};
-
 const start = async () => {
-    const chunkSize = 500;
-    const promises = [];
+    const maxConcurrency = 500;
+    resolvedLocs = [];
+    
+    // Process locations in batches with concurrency limit
+    for (let i = 0; i < mapToCheck.length; i += maxConcurrency) {
+        const batch = mapToCheck.slice(i, i + maxConcurrency);
+        const promises = [];
 
-    for (const location of mapToCheck) {
-        state.step++;
-        if (location.panoId) {
-            const promise = SVreq(location, settings.value)
-                .then((res) => {
-                    // SVReq may return multiple results for a single location
-                    const mainResult = res[0];
-                    if (mainResult && mainResult.mapcheckedPanoDate) {
-                        location.mapcheckedPanoDate = mainResult.mapcheckedPanoDate;
-                        state.success++;
-                    }
-                    return location;
-                })
-                .catch((error) => {
-                    console.error("Could not process location", location, error);
-                    // Return original location on error
-                    return location;
-                });
-            promises.push(promise);
-        } else {
-            // If no panoId, just push the original location
-            promises.push(Promise.resolve(location));
+        for (const location of batch) {
+            state.step++;
+            if (location.panoId) {
+                const promise = SVreq(location, settings.value)
+                    .then((res) => {
+                        // check which of the results in the res array has the same panoId as location
+                        const matchingResults = res.filter(result => result.panoId === location.panoId);
+                        console.log("Processing location", location, matchingResults);
+                        if (matchingResults.length > 0 && matchingResults[0].mapcheckedPanoDate) {
+                            // if extra not in location add extra
+                            if (!location.extra) {
+                                location.extra = {};
+                            }
+                            // if tags not in extra add tags
+                            if (!location.extra.tags) {
+                                location.extra.tags = [];
+                            }
+                            // remove old "checkedPanoDate - " tags
+                            location.extra.tags = location.extra.tags.filter(tag => !tag.startsWith("checkedPanoDate - "));
+                            let panodate = matchingResults[0].mapcheckedPanoDate;
+                            if (!panodate) {
+                                panodate = matchingResults[0]?.extra?.panoDate;
+                                panodate = "xx-"+panodate;
+                            }
+                            location.extra.tags.push(`checkedPanoDate - ${panodate}`);
+                            state.success++;
+                        }
+                        else{
+                            console.log("No valid pano date found for location", location, matchingResults);
+                        }
+                        return location;
+                    })
+                    .catch((error) => {
+                        console.error("Could not process location", location, error);
+                        // Return original location on error
+                        return location;
+                    });
+                promises.push(promise);
+            } else {
+                // If no panoId, just push the original location
+                promises.push(Promise.resolve(location));
+            }
         }
+
+        // Wait for current batch to complete before starting next batch
+        const batchResults = await Promise.all(promises);
+        resolvedLocs.push(...batchResults);
     }
 
-    resolvedLocs = await Promise.all(promises);
     state.finished = true;
 };
 
