@@ -10,6 +10,17 @@
 
         <div class="wrapper__inner">
             <div v-if="error" class="container center danger">{{ error }}</div>
+
+            <div v-if="!state.started" class="container">
+                <h2>Load Locations</h2>
+                <div class="content">
+                    <div class="form__row">
+                        <input type="file" @change="loadFromJSON" accept=".json" />
+                    </div>
+                    <p>Or paste GeoJSON/JSON content anywhere on the page.</p>
+                </div>
+            </div>
+
             <div v-if="!state.started" class="container">
             <h2>Settings</h2>
             <div class="content">
@@ -65,6 +76,17 @@
             <div v-if="state.loaded" class="container center">
                 <h4>{{ customMap.nbLocs }} imported {{ pluralize("location", customMap.nbLocs) }}</h4>
                 <Button v-if="!state.started" @click="handleClickStart" class="mt-02" text="Start checking" />
+            </div>
+
+            <div v-if="!state.started && state.loaded" class="container">
+                <h2>Analyse intersections</h2>
+                <div class="content">
+                    <div class="form__row">
+                        <label for="intersection-radius">Intersection search radius (meters)</label>
+                        <input type="number" id="intersection-radius" v-model.number="intersectionRadius" />
+                    </div>
+                    <Button @click="findDeadIntersections" text="Find Dead Intersections" />
+                </div>
             </div>
 
             <div v-if="!state.started" class="container">
@@ -283,6 +305,182 @@ var global = global || window;
 import { reactive, ref, computed } from "vue";
 import { useStorage } from "@vueuse/core";
 import SVreq from "@/utils/SVreq";
+
+const intersectionRadius = ref(10);
+
+function radians(deg) {
+    return (deg * Math.PI) / 180;
+}
+function degrees(rad) {
+    return (rad * 180) / Math.PI;
+}
+function calculateHeading(newLoc, oldLoc) {
+    // Accept objects with lat/lng directly
+    const lat1 = newLoc.lat;
+    const lon1 = newLoc.lng;
+    const lat2 = oldLoc.lat;
+    const lon2 = oldLoc.lng;
+    let dLat = radians(lat2 - lat1);
+    let dLon = radians(lon2 - lon1);
+    let heading = degrees(Math.atan2(dLon, dLat));
+    heading = (heading + 360) % 360;
+    return heading;
+}
+
+const streetViewService = new google.maps.StreetViewService();
+
+const hasCoverage = ({ lat, lng }) => {
+    return new Promise((resolve) => {
+        streetViewService.getPanorama(
+            {
+                location: { lat, lng },
+                radius: 50,
+                source: google.maps.StreetViewSource.OUTDOOR,
+            },
+            (data, status) => {
+                resolve(status === google.maps.StreetViewStatus.OK);
+            }
+        );
+    });
+};
+
+const findIntersections = async (location, radius) => {
+    const query = `
+        [out:json];
+        way(around:${radius},${location.lat},${location.lng})[highway];
+        (._;>;);
+        out geom;
+    `;
+    const response = await overpass(query, { endpoint: "https://overpass-api.de/api/" });
+    const data = await response.json();
+
+    const nodesToWays = new Map(); // Map<node_id, Set<way_id>>
+    const ways = data.elements.filter(e => e.type === 'way');
+
+    for (const way of ways) {
+        if (!way.nodes) continue;
+        for (const node_id of way.nodes) {
+            if (!nodesToWays.has(node_id)) {
+                nodesToWays.set(node_id, new Set());
+            }
+            nodesToWays.get(node_id).add(way.id);
+        }
+    }
+
+    const intersectionNodeIds = new Set();
+    for (const [node_id, way_ids] of nodesToWays.entries()) {
+        if (way_ids.size > 1) {
+            const wayNames = new Set();
+            for (const way_id of way_ids) {
+                const way = ways.find(w => w.id === way_id);
+                if (way && way.tags && way.tags.name) {
+                    wayNames.add(way.tags.name);
+                } else {
+                    wayNames.add(`unnamed_way_${way_id}`);
+                }
+            }
+            if (wayNames.size > 1) {
+                intersectionNodeIds.add(node_id);
+            }
+        }
+    }
+
+    if (intersectionNodeIds.size === 0) {
+        return [];
+    }
+
+    const intersectionNodes = data.elements.filter(e => e.type === 'node' && intersectionNodeIds.has(e.id));
+
+    const intersections = intersectionNodes.map(node => {
+        const connectedWayIds = Array.from(nodesToWays.get(node.id));
+        const connectedWays = data.elements.filter(e => e.type === 'way' && connectedWayIds.includes(e.id));
+        return {
+            node: node,
+            ways: connectedWays
+        };
+    });
+
+    return intersections;
+};
+
+const analyzeIntersection = async (intersection) => {
+    const { node: intersectionNode, ways } = intersection;
+
+    const coveragePromises = ways.map(way => {
+        if (!way.geometry) return Promise.resolve({ wayId: way.id, hasCoverage: false, checkPoint: null });
+
+        const intersectionPointIndex = way.geometry.findIndex(p => p.lat === intersectionNode.lat && p.lon === intersectionNode.lon);
+        if (intersectionPointIndex === -1) return Promise.resolve({ wayId: way.id, hasCoverage: false, checkPoint: null });
+
+        let checkPoint = null;
+        if (intersectionPointIndex + 1 < way.geometry.length) {
+            checkPoint = way.geometry[intersectionPointIndex + 1];
+        } else if (intersectionPointIndex - 1 >= 0) {
+            checkPoint = way.geometry[intersectionPointIndex - 1];
+        }
+
+        if (checkPoint) {
+            return hasCoverage({ lat: checkPoint.lat, lng: checkPoint.lng }).then(hasStreetCoverage => {
+                return { wayId: way.id, hasCoverage: hasStreetCoverage, checkPoint: checkPoint };
+            });
+        }
+
+        return Promise.resolve({ wayId: way.id, hasCoverage: false, checkPoint: null });
+    });
+
+    const coverageResults = await Promise.all(coveragePromises);
+    const deadStreets = coverageResults.filter(r => !r.hasCoverage && r.checkPoint);
+
+    return {
+        isDead: deadStreets.length > 0,
+        deadStreetCheckPoint: deadStreets.length > 0 ? deadStreets[0].checkPoint : null,
+    };
+};
+
+const findDeadIntersections = async () => {
+    console.log(`Starting 'Find Dead Intersections' with radius ${intersectionRadius.value}m.`);
+
+    // 1. Reset results and set state to 'processing'
+    state.started = true;
+    state.finished = false;
+    state.step = 0;
+    state.success = 0;
+    resolvedLocs.length = 0;
+    allRejectedLocs.length = 0;
+    Object.keys(rejectedLocs).forEach(key => rejectedLocs[key].length = 0);
+
+    // 2. Loop through all locations to check
+    for (const location of mapToCheck) {
+        try {
+            const intersections = await findIntersections(location, intersectionRadius.value);
+
+            let isGoodLocation = false;
+            if (intersections && intersections.length > 0) {
+                for (const intersection of intersections) {
+                    const analysis = await analyzeIntersection(intersection);
+                    if (analysis.isDead) {
+                        // Location is good, now set the heading
+                        location.heading = calculateHeading(location, analysis.deadStreetCheckPoint);
+                        isGoodLocation = true;
+                        break; // Found one, no need to check others for this location
+                    }
+                }
+            }
+
+            if (isGoodLocation) {
+                resolvedLocs.push(location);
+                state.success++;
+            }
+        } catch (error) {
+            console.error(`Failed to process location:`, location, error);
+        }
+        state.step++;
+    }
+
+    // 3. Finalize state
+    state.finished = true;
+    console.log(`Finished processing. Found ${state.success} locations near dead intersections.`);
+};
 
 import Slider from "@vueform/slider";
 import Button from "@/components/Elements/Button.vue";
@@ -819,26 +1017,6 @@ const haversineDistance = (mk1, mk2) => {
 const pluralize = (text, count) => (count > 1 ? text + "s" : text);
 
 // --- Heading utilities (post-processing) ---
-function radians(deg) {
-    return (deg * Math.PI) / 180;
-}
-function degrees(rad) {
-    return (rad * 180) / Math.PI;
-}
-function calculateHeading(newLoc, oldLoc) {
-    // Accept objects with lat/lng directly
-    const lat1 = newLoc.lat;
-    const lon1 = newLoc.lng;
-    const lat2 = oldLoc.lat;
-    const lon2 = oldLoc.lng;
-    console.log("lat1", lat1, "lon1", lon1, "lat2", lat2, "lon2", lon2);
-    let dLat = radians(lat2 - lat1);
-    let dLon = radians(lon2 - lon1);
-    let heading = degrees(Math.atan2(dLon, dLat));
-    heading = (heading + 360) % 360;
-    return heading;
-}
-
 // Map resolved locations to their original entries and set heading accordingly
 function panAccordingly(oldArray, newArray) {
     console.log("starting to pan Accordingly");
