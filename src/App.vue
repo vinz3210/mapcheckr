@@ -351,7 +351,7 @@ const findIntersections = async (location, radius) => {
         (._;>;);
         out geom;
     `;
-    const response = await overpass(query, { endpoint: "https://overpass-api.de/api/" });
+    const response = await overpass(query);
     const data = await response.json();
 
     const nodesToWays = new Map(); // Map<node_id, Set<way_id>>
