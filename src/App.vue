@@ -21,62 +21,6 @@
                 </div>
             </div>
 
-            <div v-if="!state.started" class="container">
-            <h2>Settings</h2>
-            <div class="content">
-                <div class="form__row">
-                    <label for="query">Query</label>
-                </div>
-                <div class="form__row">
-                    <input type="text" id="query" class="full" v-model="query" />
-                </div>
-                <div class="form__row">
-                    <label for="isos">ISO country codes, comma separated</label>
-                </div>
-                <div class="form__row">
-                    <input type="text" id="isos" v-model="iso" />
-                </div>
-                <div class="form__row">
-                    <label for="tags">Tags, comma separated</label>
-                </div>
-                <div class="form__row">
-                    <input type="text" id="tags" v-model="tags" />
-                </div>
-
-                <div class="form__row">
-                    <label for="degrees">BoxMaxDegrees</label>
-                </div>
-                <div class="form__row">
-                    <input type="number" id="degrees" v-model="degrees" />
-                </div>
-                
-                <div class="form__row">
-                    <label for="updatePanningCheckbox">Pan to POI</label>
-                </div>
-                <div class="form__row">
-                    <Checkbox id = "updatePanningCheckbox" v-model:checked="settings.updatePanning" label="update panning" />
-                </div>
-                <div v-if="state.osmQueryRunning" class="container center">
-                    <p><Badge :text=" state.osmDataGotCounter + '/' + allSmallBoxesCounter" /></p>
-                </div>
-                <div class="flex-center wrap space-between p-05">
-                    <div class="flex-center wrap gap-02">
-                        <!--CopyToClipboard :data="resolvedLocs" /-->
-                        <Button @click="getOsmQueryLocs" text="GetLocs" />
-                    </div>
-                    <!--div class="flex-center wrap gap-02">
-                        <Button @click="downloadGeoJsonFile" text="DownloadGeoJson" />
-                    </div>
-                    <div class="flex-center wrap gap-02">
-                        <Button @click="downloadUnpannedUncheckedJsonFile" text="DownloadUnpannedUncheckedJson" />
-                    </div-->
-                </div>
-            </div>
-            </div>
-            <div v-if="state.loaded" class="container center">
-                <h4>{{ customMap.nbLocs }} imported {{ pluralize("location", customMap.nbLocs) }}</h4>
-                <Button v-if="!state.started" @click="handleClickStart" class="mt-02" text="Start checking" />
-            </div>
 
             <div v-if="!state.started && state.loaded" class="container">
                 <h2>Analyse intersections</h2>
@@ -86,86 +30,6 @@
                         <input type="number" id="intersection-radius" v-model.number="intersectionRadius" />
                     </div>
                     <Button @click="findDeadIntersections" text="Find Dead Intersections" />
-                </div>
-            </div>
-
-            <div v-if="!state.started" class="container">
-                
-                <div class="flex-center wrap space-between p-05">
-                    <div v-if="state.finished" class="flex-center wrap gap-02">
-                        <Button @click="resetState" text="Reset" />
-                    </div>
-                </div>
-                <h2>General settings</h2>
-                <div class="content">
-                    <div class="flex">
-                        <div class="col-50">
-                            <h4>Filter by coverage</h4>
-                            <Checkbox v-model:checked="settings.filterByGen[1]" label="Gen 1" />
-                            <Checkbox v-model:checked="settings.filterByGen[23]" label="Gen 2 & 3" />
-                            <Checkbox v-model:checked="settings.filterByGen[4]" label="Gen 4" />
-                        </div>
-
-                        <div class="col-50">
-                            <h4>Filter by date</h4>
-                            <div class="form__row space-between">
-                                <label>From :</label>
-                                <input
-                                    type="month"
-                                    v-model="settings.filterByDate.from"
-                                    min="2007-01"
-                                    :max="dateToday"
-                                    @change="handleDate($event, 'from')"
-                                />
-                            </div>
-                            <div class="form__row space-between">
-                                <label>To :</label>
-                                <input
-                                    type="month"
-                                    v-model="dateToday"
-                                    min="2007-01"
-                                    :max="dateToday"
-                                    @change="handleDate($event, 'to')"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    <hr />
-
-                    <Checkbox
-                        v-model:checked="settings.rejectUnofficial"
-                        label="Reject unofficial"
-                        optText="Uncheck for photospheres map"
-                    />
-                    <hr />
-
-                    <div v-if="settings.rejectUnofficial">
-                        <Checkbox
-                            v-model:checked="settings.rejectNoDescription"
-                            label="Reject locations without description"
-                            optText="This might prevent trekkers in most cases, but can reject regular streetview without
-						description (eg. Mongolia/South Korea)"
-                        />
-                        <hr />
-                    </div>
-                    <div v-if="settings.rejectUnofficial">
-                        <Checkbox
-                            v-model:checked="settings.changeToOfficial"
-                            label="Change unofficial to official"
-                            optText="Change unofficial locations to official within the radius."
-                        />
-                        <hr />
-                    </div>
-
-                    Radius<input type="number" v-model.number="settings.radius" @change="handleRadiusInput" />m<br />
-                    <small>Radius in which to search for a non-panoID'ed panorama.</small>
-                    <hr />
-
-                    <div class="flex-center">
-                        <Checkbox v-model:checked="settings.removeNearby" label="Reject duplicates within a " />
-                        <input type="number" v-model.number="settings.nearbyRadius" @change="handleNearbyRadiusInput" />m radius
-                    </div>
-                    <hr />
                 </div>
             </div>
 
@@ -300,47 +164,58 @@
 </template>
 
 <script setup>
-var global = global || window;
-
 import { reactive, ref, computed } from "vue";
 import { useStorage } from "@vueuse/core";
 import SVreq from "@/utils/SVreq";
 
 const intersectionRadius = ref(10);
 
-function radians(deg) {
-    return (deg * Math.PI) / 180;
-}
-function degrees(rad) {
-    return (rad * 180) / Math.PI;
-}
-function calculateHeading(newLoc, oldLoc) {
-    // Accept objects with lat/lng directly
-    const lat1 = newLoc.lat;
-    const lon1 = newLoc.lng;
-    const lat2 = oldLoc.lat;
-    const lon2 = oldLoc.lng;
-    let dLat = radians(lat2 - lat1);
-    let dLon = radians(lon2 - lon1);
-    let heading = degrees(Math.atan2(dLon, dLat));
-    heading = (heading + 360) % 360;
+const radians = (deg) => (deg * Math.PI) / 180;
+const degrees = (rad) => (rad * 180) / Math.PI;
+const calculateHeading = (from, to) => {
+    // from/to: { lat, lng }
+    const lat1 = (from.lat ?? 0) * (Math.PI / 180);
+    const lat2 = (to.lat ?? 0) * (Math.PI / 180);
+    const dLon = ((to.lng ?? to.lon ?? 0) - (from.lng ?? from.lon ?? 0)) * (Math.PI / 180);
+    const heading = (degrees(Math.atan2(dLon, lat2 - lat1)) + 360) % 360;
     return heading;
-}
+};
 
-const streetViewService = new google.maps.StreetViewService();
+const streetViewService = typeof google !== "undefined" && google.maps ? new google.maps.StreetViewService() : null;
 
-const hasCoverage = ({ lat, lng }) => {
+const hasCoverage = ({ lat, lng }, timeoutMs = 5000) => {
     return new Promise((resolve) => {
-        streetViewService.getPanorama(
-            {
-                location: { lat, lng },
-                radius: 50,
-                source: google.maps.StreetViewSource.OUTDOOR,
-            },
-            (data, status) => {
-                resolve(status === google.maps.StreetViewStatus.OK);
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            resolve(false);
+        }, timeoutMs);
+
+        if (!streetViewService) {
+            clearTimeout(timer);
+            resolve(false);
+            return;
+        }
+
+        try {
+            streetViewService.getPanorama(
+                { location: { lat, lng }, radius: 50, source: google.maps.StreetViewSource.OUTDOOR },
+                (data, status) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    const ok = typeof google?.maps?.StreetViewStatus !== "undefined" ? status === google.maps.StreetViewStatus.OK : !!data;
+                    resolve(!!ok);
+                }
+            );
+        } catch (err) {
+            if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(false);
             }
-        );
+        }
     });
 };
 
@@ -355,14 +230,12 @@ const findIntersections = async (location, radius) => {
     const data = await response.json();
 
     const nodesToWays = new Map(); // Map<node_id, Set<way_id>>
-    const ways = data.elements.filter(e => e.type === 'way');
+    const ways = data.elements.filter((e) => e.type === "way");
 
     for (const way of ways) {
         if (!way.nodes) continue;
         for (const node_id of way.nodes) {
-            if (!nodesToWays.has(node_id)) {
-                nodesToWays.set(node_id, new Set());
-            }
+            if (!nodesToWays.has(node_id)) nodesToWays.set(node_id, new Set());
             nodesToWays.get(node_id).add(way.id);
         }
     }
@@ -405,22 +278,59 @@ const findIntersections = async (location, radius) => {
 
 const analyzeIntersection = async (intersection) => {
     const { node: intersectionNode, ways } = intersection;
+    const all_the_nodes_from_the_ways = ways?.flatMap((way) => way.geometry) ?? [];
+    // Compute distance (meters) between two lat/lon points using the haversine formula
+    const computeDistanceMeters = (p1, p2) => {
+        const R = 6371.071; // km
+        const rlat1 = (p1.lat * Math.PI) / 180;
+        const rlat2 = (p2.lat * Math.PI) / 180;
+        const difflat = rlat2 - rlat1;
+        const difflon = ((p2.lon ?? p2.lng) - (p1.lon ?? p1.lng)) * (Math.PI / 180);
+        const a =
+            Math.sin(difflat / 2) * Math.sin(difflat / 2) +
+            Math.cos(rlat1) * Math.cos(rlat2) * Math.sin(difflon / 2) * Math.sin(difflon / 2);
+        const km = 2 * R * Math.asin(Math.sqrt(a));
+        return km * 1000;
+    };
 
+    // Sort nodes by distance to the intersection node (ascending)
+    var all_the_nodes_from_the_ways_sorted_by_distance_to_the_node = all_the_nodes_from_the_ways
+        .map(n => ({ node: n, dist: computeDistanceMeters(n, intersectionNode) }))
+        .sort((a, b) => a.dist - b.dist);
+
+    // Remove nodes that are closer than the configured intersectionRadius (in meters)
+    const minRadiusMeters = intersectionRadius && typeof intersectionRadius.value === "number" ? intersectionRadius.value : 0;
+    const filtered_nodes_with_dist = all_the_nodes_from_the_ways_sorted_by_distance_to_the_node.filter(item => {
+        // Exclude the exact intersection node and any node closer than the radius
+        const isSameAsIntersection = item.node.lat === intersectionNode.lat && item.node.lon === intersectionNode.lon;
+        return !isSameAsIntersection && item.dist >= minRadiusMeters;
+    });
+
+    // Convert back to an array of nodes (sorted, and outside the radius)
+    all_the_nodes_from_the_ways_sorted_by_distance_to_the_node = filtered_nodes_with_dist.map((i) => i.node);
     const coveragePromises = ways.map(way => {
         if (!way.geometry) return Promise.resolve({ wayId: way.id, hasCoverage: false, checkPoint: null });
-
         const intersectionPointIndex = way.geometry.findIndex(p => p.lat === intersectionNode.lat && p.lon === intersectionNode.lon);
         if (intersectionPointIndex === -1) return Promise.resolve({ wayId: way.id, hasCoverage: false, checkPoint: null });
 
+        // Prefer the second node away from the intersection along the way (skip the adjacent node)
+        // i.e., try +2 or -2. If not available, fall back to the immediate neighbor (+1 or -1).
         let checkPoint = null;
-        if (intersectionPointIndex + 1 < way.geometry.length) {
+        if (intersectionPointIndex + 2 < way.geometry.length) {
+            checkPoint = way.geometry[intersectionPointIndex + 2];
+        } else if (intersectionPointIndex - 2 >= 0) {
+            checkPoint = way.geometry[intersectionPointIndex - 2];
+        } else if (intersectionPointIndex + 1 < way.geometry.length) {
             checkPoint = way.geometry[intersectionPointIndex + 1];
         } else if (intersectionPointIndex - 1 >= 0) {
             checkPoint = way.geometry[intersectionPointIndex - 1];
         }
 
+
+
         if (checkPoint) {
-            return hasCoverage({ lat: checkPoint.lat, lng: checkPoint.lng }).then(hasStreetCoverage => {
+            // way.geometry nodes use `.lat` and `.lon`. hasCoverage expects `{ lat, lng }`.
+            return hasCoverage({ lat: checkPoint.lat, lng: checkPoint.lon }).then(hasStreetCoverage => {
                 return { wayId: way.id, hasCoverage: hasStreetCoverage, checkPoint: checkPoint };
             });
         }
@@ -431,9 +341,53 @@ const analyzeIntersection = async (intersection) => {
     const coverageResults = await Promise.all(coveragePromises);
     const deadStreets = coverageResults.filter(r => !r.hasCoverage && r.checkPoint);
 
+    // If the street is dead, check each nearby node for existing coverage and
+    // remove nodes that already have coverage. Then pick the second-closest
+    // uncovered unique node (fallback to the first if only one exists).
+    let secondClosestNode = null;
+    if (deadStreets.length > 0) {
+        // Candidates: sorted nodes excluding the exact intersection node
+        const candidates = all_the_nodes_from_the_ways_sorted_by_distance_to_the_node.filter(
+            n => !(n.lat === intersectionNode.lat && n.lon === intersectionNode.lon)
+        );
+
+        // Check coverage for each candidate node (parallel)
+        const coverageChecks = await Promise.all(
+            candidates.map(async (n) => {
+                try {
+                    const has = await hasCoverage({ lat: n.lat, lng: n.lon });
+                    return { node: n, hasCoverage: has };
+                } catch (err) {
+                    return { node: n, hasCoverage: false };
+                }
+            })
+        );
+
+        // Keep only nodes without coverage
+        const uncovered = coverageChecks.filter(c => !c.hasCoverage).map(c => c.node);
+
+        // Deduplicate while preserving order
+        const seen = new Set();
+        const unique = [];
+        for (const n of uncovered) {
+            const key = `${n.lat},${n.lon}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(n);
+            }
+        }
+
+        if (unique.length >= 2) {
+            secondClosestNode = unique[1];
+        } else if (unique.length === 1) {
+            // Fallback to the closest available uncovered node if there's no second one
+            secondClosestNode = unique[0];
+        }
+    }
+
     return {
         isDead: deadStreets.length > 0,
-        deadStreetCheckPoint: deadStreets.length > 0 ? deadStreets[0].checkPoint : null,
+        deadStreetCheckPoint: secondClosestNode,
     };
 };
 
@@ -453,16 +407,49 @@ const findDeadIntersections = async () => {
     for (const location of mapToCheck) {
         try {
             const intersections = await findIntersections(location, intersectionRadius.value);
-
             let isGoodLocation = false;
             if (intersections && intersections.length > 0) {
                 for (const intersection of intersections) {
                     const analysis = await analyzeIntersection(intersection);
+                    console.log("analysis objectttt", analysis);
                     if (analysis.isDead) {
-                        // Location is good, now set the heading
-                        location.heading = calculateHeading(location, analysis.deadStreetCheckPoint);
-                        isGoodLocation = true;
-                        break; // Found one, no need to check others for this location
+                        // Location is good. Try to obtain the actual intersection node's Street View
+                        // and replace this location's coordinates and panoId when available.
+                        console.log("analysis object", analysis);
+                        try {
+                            const intersectionNode = intersection.node;
+                            if (intersectionNode && intersectionNode.lat != null && intersectionNode.lon != null) {
+                                // Ask SVreq to resolve a panorama at the exact intersection node
+                                const panoLoc = await SVreq({ lat: intersectionNode.lat, lng: intersectionNode.lon }, settings.value);
+
+                                // If SVreq returned data, overwrite the location's coords and panoId
+                                if (panoLoc) {
+                                    if (typeof panoLoc.lat !== 'undefined') location.lat = panoLoc.lat;
+                                    if (typeof panoLoc.lng !== 'undefined') location.lng = panoLoc.lng;
+                                    if (panoLoc.panoId) location.panoId = panoLoc.panoId;
+                                }
+
+                                // Recalculate heading using the (possibly updated) location and the dead-street checkpoint
+                                if (analysis.deadStreetCheckPoint) {
+                                    location.heading = calculateHeading(location, analysis.deadStreetCheckPoint);
+                                }
+                                isGoodLocation = true;
+                                break;
+                            } else {
+                                // If we don't have intersection node coordinates, fallback to previous behavior
+                                location.heading = calculateHeading(location, analysis.deadStreetCheckPoint);
+                                isGoodLocation = true;
+                                break;
+                            }
+                        } catch (e) {
+                            // If SV lookup fails, fallback to setting heading only and keep original coords
+                            console.warn('SV request for intersection node failed', e);
+                            if (analysis.deadStreetCheckPoint) {
+                                location.heading = calculateHeading(location, analysis.deadStreetCheckPoint);
+                            }
+                            isGoodLocation = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -482,7 +469,6 @@ const findDeadIntersections = async () => {
     console.log(`Finished processing. Found ${state.success} locations near dead intersections.`);
 };
 
-import Slider from "@vueform/slider";
 import Button from "@/components/Elements/Button.vue";
 import Checkbox from "@/components/Elements/Checkbox.vue";
 import Badge from "@/components/Elements/Badge.vue";
@@ -498,24 +484,23 @@ import { overpass } from "overpass-ts";
 
 
 var outputGeoJsonFeatures = [];
-var finishedGettingOSMData = false;
 var allSmallBoxesCounter = 0;
+
+// Helper: chunk an array into groups of n
+const chunkArray = (arr, n) => {
+    if (!Array.isArray(arr) || n <= 0) return [];
+    const result = [];
+    for (let i = 0; i < arr.length; i += n) result.push(arr.slice(i, i + n));
+    return result;
+};
 
 
 
 
 const isoToBoundingBox = (iso) => {
-    console.log(iso)
-    const bbox = countryBoundingBoxes[iso].boundingBox;
-    console.log(bbox);
-    return bbox;
+    return countryBoundingBoxes[iso].boundingBox;
 };
-const isoToCountryName = (iso) => {
-    console.log(iso);
-    console.log(countryBoundingBoxes);
-    console.log(countryBoundingBoxes[iso]);
-    return countryBoundingBoxes[iso]["name"];
-};
+// isoToCountryName removed (unused)
 
 const convertBoundingBoxToSmallerBoxes = (boundingbox) => {
     const degreestoadd = parseFloat(document.getElementById("degrees").value);
@@ -569,14 +554,8 @@ async function getOsmQueryLocsByISO (query, smallerCountryBoundingBoxes){
 
 async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
     if (bboxes.length == 0){
-        
-        console.log(outputGeoJsonFeatures)
-
-
-        console.log("finished 1")
-        state.osmQueryRunning = false;
-        const jsonFile = getUnpannedUncheckedJson();
-        console.log("unpannedUnchecked.json", jsonFile);
+    state.osmQueryRunning = false;
+    const jsonFile = getUnpannedUncheckedJson();
         checkJSON(jsonFile);
         handleClickStart()
 
@@ -586,31 +565,16 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
     const osmQuery = `[out:json];
     area["ISO3166-1"="${iso}"]->.searchArea;
     ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
-    console.log(osmQuery);
     await overpass(osmQuery).then((response) => {
-        response.json().then(data =>{
-            console.log(data)
-            data.elements.forEach((element) => {
-
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
+        response.json().then((data) => {
+            data.elements.forEach((element) => outputGeoJsonFeatures.push(element));
             state.osmDataGotCounter++;
             getOsmQueryLocsForBboxes(query, bboxes.slice(1), iso);
-        }
-        );
+        });
     });
 };
 
-function getCenterOfWay(way){
-    let lat = 0;
-    let lon = 0;
-    way.geometry.forEach((node)=>{
-        lat += node.lat;
-        lon += node.lon;
-    });
-    return [lat/way.geometry.length, lon/way.geometry.length];
-}
+// getCenterOfWay removed (unused)
 
 function convertElementToCustomCoordinate(element){
     let type = element.type;
@@ -621,12 +585,11 @@ function convertElementToCustomCoordinate(element){
         lng = element.lon;
     }
     else if (type == "way"){
-        if(state.wayPicking == "random"){
+    if (state.wayPicking == "random") {
             let randomIndex = Math.floor(Math.random() * element.geometry.length);
             lat = element.geometry[randomIndex].lat;
             lng = element.geometry[randomIndex].lon;
         } else if (state.wayPicking == "center" || type =="relation"){
-            console.log(element);
             lat = element.center.lat;
             lng = element.center.lon;
             //[lat, lng] = getCenterOfWay(element);
@@ -652,49 +615,6 @@ function getUnpannedUncheckedJson(){
     };
     return jsonFile;
 }
-
-function downloadUnpannedUncheckedJsonFile(){
-    const jsonFile = getUnpannedUncheckedJson();
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonFile));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "unpannedUnchecked.json");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-}
-
-/*
-const getOsmQueryLocsForBbox = (query, bbox) => {
-    console.log(bbox);
-    const osmQuery = `[out:json]; ${query}(${bbox.join(",")}); out geom;`;
-    overpass(osmQuery).then((response) => {
-        response.json().then(data =>{
-            data.elements.forEach((element) => {
-                outputGeoJsonFeatures.push(element)
-            })
-            console.log(outputGeoJsonFeatures.length);
-
-        }
-        );
-    });
-};
-*/
-
-const downloadGeoJsonFile = ()=>{
-    const geoJson = {
-        type: "FeatureCollection",
-        features: outputGeoJsonFeatures
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geoJson));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "data.geojson");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-}
-
 
 
 
@@ -852,18 +772,11 @@ const handleNearbyRadiusInput = (e) => {
     }
 };
 
-Array.prototype.chunk = function (n) {
-    if (!this.length) {
-        return [];
-    }
-    return [this.slice(0, n)].concat(this.slice(n).chunk(n));
-};
-
 const start = async () => {
     const chunkSize = 500;
     // make copy of mapToCheck
     const copy_of_mapToCheck = JSON.parse(JSON.stringify(mapToCheck));
-    for (let locationGroup of mapToCheck.chunk(chunkSize)) {
+    for (let locationGroup of chunkArray(mapToCheck, chunkSize)) {
         const responses = await Promise.allSettled(locationGroup.map((l) => SVreq(l, settings.value)));
         for (let response of responses) {
             if (response.status === "fulfilled") {
@@ -912,7 +825,7 @@ const start = async () => {
     if (settings.value.updatePanning) {
         resolvedLocs = panAccordingly(copy_of_mapToCheck, resolvedLocs);
     }
-    console.log(1)
+    
     allRejectedLocs = [
         ...rejectedLocs.SVNotFound,
         ...rejectedLocs.unofficial,
@@ -921,11 +834,7 @@ const start = async () => {
         ...rejectedLocs.outOfDateRange,
         ...rejectedLocs.isolated,
     ];
-    console.log(2)
-    allRejectedLocs = allRejectedLocs.map(location =>{
-        return location.loc
-    });
-    console.log(3)
+    allRejectedLocs = allRejectedLocs.map((location) => location.loc);
     state.finished = true;
 };
 
