@@ -404,13 +404,13 @@ const findDeadIntersections = async () => {
     allRejectedLocs.length = 0;
     Object.keys(rejectedLocs).forEach(key => rejectedLocs[key].length = 0);
 
+    const snappedLocations = [];
     // 2. Loop through all locations to check
     for (const location of mapToCheck) {
         try {
             const intersections = await findIntersections(location, intersectionRadius.value);
 
             if (intersections && intersections.length > 0) {
-                // Find the closest intersection
                 const intersectionsWithDist = intersections.map(intersection => {
                     const dist = haversineDistance(location, intersection.node);
                     return { ...intersection, dist };
@@ -425,16 +425,9 @@ const findDeadIntersections = async () => {
                         { lat: closestIntersection.node.lat, lng: closestIntersection.node.lon },
                         settings.value
                     );
-
                     if (panoLoc) {
-                        location.lat = panoLoc.lat;
-                        location.lng = panoLoc.lng;
-                        if (panoLoc.panoId) location.panoId = panoLoc.panoId;
-
-                        resolvedLocs.push(location);
-                        state.success++;
+                        snappedLocations.push({ panoLoc, intersection: closestIntersection });
                     } else {
-                        // This case might not be hit if SVreq always rejects on failure.
                         rejectedLocs.SVNotFound.push({ loc: location, reason: "SV_NOT_FOUND" });
                         state.SVNotFound++;
                     }
@@ -443,7 +436,6 @@ const findDeadIntersections = async () => {
                     state.SVNotFound++;
                 }
             } else {
-                // No intersections found for this location.
                 rejectedLocs.SVNotFound.push({ loc: location, reason: "NO_INTERSECTION_FOUND" });
                 state.SVNotFound++;
             }
@@ -453,9 +445,23 @@ const findDeadIntersections = async () => {
         state.step++;
     }
 
-    // 3. Finalize state
+    // 2. Deduplicate locations based on PanoID
+    const uniqueSnappedLocations = [
+        ...new Map(snappedLocations.map((item) => [item.panoLoc.panoId, item])).values(),
+    ];
+
+    // 3. Pan unique locations to a dead road
+    for (const { panoLoc, intersection } of uniqueSnappedLocations) {
+        const analysis = await analyzeIntersection(intersection);
+        if (analysis.isDead && analysis.deadStreetCheckPoint) {
+            panoLoc.heading = calculateHeading(panoLoc, analysis.deadStreetCheckPoint);
+        }
+        resolvedLocs.push(panoLoc);
+        state.success++;
+    }
+
     state.finished = true;
-    console.log(`Finished snapping locations.`);
+    console.log(`Finished processing. Found ${resolvedLocs.length} unique locations.`);
 };
 
 import Button from "@/components/Elements/Button.vue";
