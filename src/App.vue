@@ -173,12 +173,17 @@ const intersectionRadius = ref(10);
 const radians = (deg) => (deg * Math.PI) / 180;
 const degrees = (rad) => (rad * 180) / Math.PI;
 const calculateHeading = (from, to) => {
-    // from/to: { lat, lng }
-    const lat1 = (from.lat ?? 0) * (Math.PI / 180);
-    const lat2 = (to.lat ?? 0) * (Math.PI / 180);
-    const dLon = ((to.lng ?? to.lon ?? 0) - (from.lng ?? from.lon ?? 0)) * (Math.PI / 180);
-    const heading = (degrees(Math.atan2(dLon, lat2 - lat1)) + 360) % 360;
-    return heading;
+    const lat1 = radians(from.lat ?? 0);
+    const lon1 = radians(from.lng ?? from.lon ?? 0);
+    const lat2 = radians(to.lat ?? 0);
+    const lon2 = radians(to.lng ?? to.lon ?? 0);
+
+    const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+
+    const brng = Math.atan2(y, x);
+
+    return (degrees(brng) + 360) % 360;
 };
 
 const streetViewService = typeof google !== "undefined" && google.maps ? new google.maps.StreetViewService() : null;
