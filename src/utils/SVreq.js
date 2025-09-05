@@ -1,18 +1,6 @@
-const SV = new google.maps.StreetViewService();
+import { calculateHeading } from "./geo.js";
 
-function calculate_heading(lat1, lon1, lat2, lon2) {
-    const radians = function(degrees) {
-        return degrees * Math.PI / 180;
-    };
-    const degrees = function(radians) {
-        return radians * 180 / Math.PI;
-    };
-    let delta_lat = radians(lat2 - lat1);
-    let delta_lon = radians(lon2 - lon1);
-    let heading = degrees(Math.atan2(delta_lon, delta_lat));
-    heading = (heading + 360) % 360;
-    return heading;
-}
+const SV = new google.maps.StreetViewService();
 
 
 
@@ -120,7 +108,7 @@ export default function SVreq(loc, settings) {
                 loc.lat = res.location.latLng.lat();
                 loc.lng = res.location.latLng.lng();
                 if(settings.updatePanning)
-                    loc.heading = calculate_heading(newLat, newLng, oldLat, oldLng);
+                    loc.heading = calculateHeading({ lat: newLat, lng: newLng }, { lat: oldLat, lng: oldLng });
             }
 
             // Update to latest pano
@@ -206,15 +194,3 @@ function getHeading(direction, res) {
 }
 
 const randomInRange = (min, max) => Math.round((Math.random() * (max - min + 1) + min) * 100) / 100;
-
-// const closest = (arr, num) => arr.reduce((a, b) => (Math.abs(b - num) < Math.abs(a - num) ? b : a));
-
-// const difference = (a, b) => {
-//     const d = Math.abs(a - b);
-//     return d > 180 ? 360 - d : d;
-// };
-
-// const getNearestHeading = (bs, a) => {
-//     const ds = bs.map((b) => difference(a, b.heading));
-//     return bs[ds.indexOf(Math.min.apply(null, ds))].heading;
-// };
