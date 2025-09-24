@@ -49,7 +49,7 @@
                     </h3>
                     <div v-if="resolvedLocs.length" class="flex-center wrap gap-02">
                         <CopyToClipboard :data="resolvedLocsMapfile" />
-                        <ExportToJSON :data="resolvedLocsMapfile" />
+                        <ExportToJSON :data="resolvedLocsMapfile" :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="resolvedLocsMapfile" />
                     </div>
                 </div>
@@ -63,7 +63,7 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="allRejectedLocs" />
-                        <ExportToJSON :data="allRejectedLocs" isRejected />
+                        <ExportToJSON :data="allRejectedLocs" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="allRejectedLocs" isRejected />
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.SVNotFound" />
-                        <ExportToJSON :data="rejectedLocs.SVNotFound" isRejected />
+                        <ExportToJSON :data="rejectedLocs.SVNotFound" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.SVNotFound" isRejected />
                     </div>
                 </div>
@@ -87,7 +87,7 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.unofficial" />
-                        <ExportToJSON :data="rejectedLocs.unofficial" isRejected />
+                        <ExportToJSON :data="rejectedLocs.unofficial" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.unofficial" isRejected />
                     </div>
                 </div>
@@ -99,7 +99,7 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.noDescription" />
-                        <ExportToJSON :data="rejectedLocs.noDescription" isRejected />
+                        <ExportToJSON :data="rejectedLocs.noDescription" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.noDescription" isRejected />
                     </div>
                 </div>
@@ -111,7 +111,7 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.wrongGeneration" />
-                        <ExportToJSON :data="rejectedLocs.wrongGeneration" isRejected />
+                        <ExportToJSON :data="rejectedLocs.wrongGeneration" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.wrongGeneration" isRejected />
                     </div>
                 </div>
@@ -123,14 +123,14 @@
                     </h3>
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.outOfDateRange" />
-                        <ExportToJSON :data="rejectedLocs.outOfDateRange" isRejected />
+                        <ExportToJSON :data="rejectedLocs.outOfDateRange" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.outOfDateRange" isRejected />
                     </div>
                 </div>
                 <div v-if="rejectedLocs.isolated.length" class="flex-center wrap space-between">
                     <div class="flex-center wrap gap-02">
                         <CopyToClipboard :data="rejectedLocs.isolated" />
-                        <ExportToJSON :data="rejectedLocs.isolated" isRejected />
+                        <ExportToJSON :data="rejectedLocs.isolated" isRejected :filename="importedFilename" action="datechecked" />
                         <ExportToCSV :data="rejectedLocs.isolated" isRejected />
                     </div>
                 </div>
@@ -206,6 +206,8 @@ const initialState = {
 const state = reactive({ ...initialState });
 
 const customMap = ref({});
+// store original uploaded filename (if any)
+let importedFilename = "";
 
 let mapToCheck = [];
 let resolvedLocs = [];
@@ -375,6 +377,7 @@ const loadFromJSON = (e) => {
 };
 
 const readFile = (file) => {
+    importedFilename = file && file.name ? file.name : "";
     const reader = new FileReader();
     reader.onload = (e) => {
         checkJSON(e.target.result);

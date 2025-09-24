@@ -42,7 +42,7 @@
                     </h3>
                     <div v-if="resolvedLocs.length" class="flex-center wrap gap-02">
                         <CopyToClipboard :data="resolvedLocs" />
-                        <ExportToJSON :data="resolvedLocs" />
+                        <ExportToJSON :data="resolvedLocs" :filename="importedFilename" action="datetagged" />
                         <ExportToCSV :data="resolvedLocs" />
                     </div>
                 </div>
@@ -107,6 +107,8 @@ const initialState = {
 const state = reactive({ ...initialState });
 
 const customMap = ref({});
+// store original uploaded filename (if any)
+let importedFilename = "";
 
 let mapToCheck = [];
 let resolvedLocs = [];
@@ -203,6 +205,7 @@ const loadFromJSON = (e) => {
 };
 
 const readFile = (file) => {
+    importedFilename = file && file.name ? file.name : "";
     const reader = new FileReader();
     reader.onload = (e) => {
         checkJSON(e.target.result);
