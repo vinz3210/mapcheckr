@@ -384,7 +384,7 @@ async function getOsmQueryLocsForBboxes (query, bboxes, iso) {
 
         return;
     }
-    let outputForm = state.wayPicking == "center"? "center":"geom";
+    let outputForm = "center";
     const osmQuery = `[out:json];
     area["ISO3166-1"="${iso}"]->.searchArea;
     ${query}(${bboxes[0].join(",")})(area.searchArea); out ${outputForm};`;
