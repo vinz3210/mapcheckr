@@ -1,0 +1,43 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #333;
+    color: #eee;
+}
+
+.container {
+    text-align: center;
+}
+
+#infobox{
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #444;
+    border-radius: 5px;
+    display: inline-block;
+    margin: 10px;
+}
+#infobox a{
+    color: #fff;
+}
+#infobox ul{
+    list-style-type: none;
+    padding: 0;
+}
+#infobox li{
+    margin: 10px 0;
+}
+#infobox img{
+    max-width: 100%;
+    width: 400px;
+}
+@media (max-width: 768px) {
+#infobox {
+    display: none;
+}
+}
