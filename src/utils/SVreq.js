@@ -5,16 +5,17 @@ export default function SVreq(loc, settings) {
         let svNotFoundRetry = false;
 
         if (!loc.panoId) {
-            if(true) {
+            if (true) {
                 let returnLoc = await SV.getPanorama({
-                    location: {lat: loc.lat, lng: loc.lng},
+                    location: { lat: loc.lat, lng: loc.lng },
                     preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
                     sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
                     radius: 1 // Search within a 1-meter radius
-                  },checkPano).catch((e) =>
+                }, checkPano).catch((e) =>
                     reject({ loc, reason: e.message })
                 );
-                if(returnLoc) {
+                if (returnLoc) {
+                    console.log("returnLoc", returnLoc);
                     // If returnLoc.data.time exists, return an array of locs for each pano. date in form of YYYY-MM
                     if (returnLoc.data.time && Array.isArray(returnLoc.data.time)) {
                         const locs = returnLoc.data.time.map((t) => ({
@@ -44,13 +45,14 @@ export default function SVreq(loc, settings) {
         }
 
         function checkPano(res, status) {
+            console.log("checkPano", res, status);
             if (status != google.maps.StreetViewStatus.OK) {
                 if (svNotFoundRetry) {
                     return reject({ loc, reason: "SV_NOT_FOUND" });
                 } else {
                     svNotFoundRetry = true;
                     return SV.getPanorama({
-                        location: {lat: loc.lat, lng: loc.lng},
+                        location: { lat: loc.lat, lng: loc.lng },
                         preference: google.maps.StreetViewPreference.NEAREST, // Set the preference
                         sources: [google.maps.StreetViewSource.GOOGLE], // Only search official panoramas
                         radius: 1 // Search within a 1-meter radius
@@ -68,10 +70,13 @@ export default function SVreq(loc, settings) {
                     // get keys that have two letters and end with z
                     let twoLetterKeys = all_keys.filter(key => key.length === 2 && key.endsWith('z'));
                     if (twoLetterKeys.length === 0) {
+                        twoLetterKeys = all_keys.filter(key => key.length === 2);
+                    }
+                    if (twoLetterKeys.length === 0) {
                         console.warn("No valid date key found in pano data", t);
                         return reject({ loc, reason: "NO_DATE" });
                     }
-                    
+
                     var dateValue = t[twoLetterKeys[0]]; // Get the first valid date value
                     if (!dateValue) {
                         console.warn("No date value found in pano data", t);
@@ -95,14 +100,14 @@ export default function SVreq(loc, settings) {
             }
 
             if (res.location.pano.length != 22) return reject({ ...loc, reason: "UNOFFICIAL" });
-            
+
 
 
             // Update coordinates
-        
+
             loc.lat = res.location.latLng.lat();
             loc.lng = res.location.latLng.lng();
-        
+
 
 
             resolve([loc]);

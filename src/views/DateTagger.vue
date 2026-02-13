@@ -134,7 +134,7 @@ const isDateValid = (dateStr) => !isNaN(new Date(dateStr));
 const start = async () => {
     const maxConcurrency = 500;
     resolvedLocs = [];
-    
+    let unprocessableLocations = [];
     // Process locations in batches with concurrency limit
     for (let i = 0; i < mapToCheck.length; i += maxConcurrency) {
         const batch = mapToCheck.slice(i, i + maxConcurrency);
@@ -147,7 +147,7 @@ const start = async () => {
                     .then((res) => {
                         // check which of the results in the res array has the same panoId as location
                         const matchingResults = res.filter(result => result.panoId === location.panoId);
-                        console.log("Processing location", location, matchingResults);
+                        //console.log("Processing location", location, matchingResults);
                         if (matchingResults.length > 0 && matchingResults[0].mapcheckedPanoDate) {
                             // if extra not in location add extra
                             if (!location.extra) {
@@ -158,13 +158,13 @@ const start = async () => {
                                 location.extra.tags = [];
                             }
                             // remove old "checkedPanoDate - " tags
-                            location.extra.tags = location.extra.tags.filter(tag => !tag.startsWith("checkedPanoDate - "));
+                            location.extra.tags = location.extra.tags.filter(tag => !tag.startsWith("tagged - "));
                             let panodate = matchingResults[0].mapcheckedPanoDate;
                             if (!panodate) {
                                 panodate = matchingResults[0]?.extra?.panoDate;
                                 panodate = "xx-"+panodate;
                             }
-                            location.extra.tags.push(`checkedPanoDate - ${panodate}`);
+                            location.extra.tags.push(`tagged - ${panodate}`);
                             state.success++;
                         }
                         else{
@@ -174,6 +174,7 @@ const start = async () => {
                     })
                     .catch((error) => {
                         console.error("Could not process location", location, error);
+                        unprocessableLocations.push(location);
                         // Return original location on error
                         return location;
                     });
@@ -188,7 +189,7 @@ const start = async () => {
         const batchResults = await Promise.all(promises);
         resolvedLocs.push(...batchResults);
     }
-
+    console.log("Unprocessable locations:", unprocessableLocations);
     state.finished = true;
 };
 
